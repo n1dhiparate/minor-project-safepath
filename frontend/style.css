@@ -1,4 +1,5 @@
-body {
+html, body {
+  height: 100%;
   margin: 0;
   font-family: Arial, sans-serif;
   text-align: center;
@@ -14,4 +15,5 @@ h2 {
   border: 2px solid #444;
   border-radius: 8px;
 }
+
 
