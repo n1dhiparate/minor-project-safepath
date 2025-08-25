@@ -1,9 +1,17 @@
 body {
   margin: 0;
   font-family: Arial, sans-serif;
+  text-align: center;
+}
+
+h2 {
+  margin: 10px 0;
 }
 
 #map {
-  height: 100vh; /* full screen height */
-  width: 100%;   /* full width */
+  height: 90vh;   /* map fills most of the screen */
+  width: 100%;
+  border: 2px solid #444;
+  border-radius: 8px;
 }
+
