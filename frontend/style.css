@@ -10,10 +10,7 @@ h2 {
 }
 
 #map {
-  height: 90vh;   /* map fills most of the screen */
+  height: 100vh;   /* or at least 500px */
   width: 100%;
-  border: 2px solid #444;
-  border-radius: 8px;
 }
-
 
