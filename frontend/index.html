@@ -42,6 +42,31 @@
 
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
+
+  import { collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+// Add a test report
+async function addReport() {
+  await addDoc(collection(db, "reports"), {
+    type: "unsafe street",
+    location: { lat: 19.07, lng: 72.87 },
+    timestamp: new Date()
+  });
+  console.log("✅ Report added!");
+}
+
+// Fetch all reports
+async function getReports() {
+  const querySnapshot = await getDocs(collection(db, "reports"));
+  querySnapshot.forEach((doc) => {
+    console.log(doc.id, " => ", doc.data());
+  });
+}
+
+// Run test
+addReport();
+getReports();
+
 </script>
 
 </body>
