@@ -114,7 +114,6 @@ var spots = [
   { name:"Spot J", lat:19.08613582954777, lng:72.83519510710131, category:"other", safetyStatus:"safe" }
 ];
 
-// Show each spot on map
 spots.forEach(spot => {
   var color = (spot.safetyStatus === "safe") ? "green" : 
               (spot.safetyStatus === "caution") ? "orange" : "red";
@@ -127,3 +126,52 @@ spots.forEach(spot => {
   }).addTo(map)
     .bindPopup(`<b>${spot.name}</b><br>Category: ${spot.category}<br>Status: ${spot.safetyStatus.toUpperCase()}`);
 });
+
+// ✅ Firebase imports
+import { getDatabase, ref, set } 
+  from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+import { initializeApp } 
+  from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+
+// ✅ Firebase config (SAME as index.html)
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "safepath-46c12.firebaseapp.com",
+  databaseURL: "https://safepath-46c12-default-rtdb.firebaseio.com",
+  projectId: "safepath-46c12",
+  storageBucket: "safepath-46c12.appspot.com",
+  messagingSenderId: "422757931012",
+  appId: "1:422757931012:web:aa2284635d50f621d27d51"
+};
+
+// ✅ Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// ✅ Function to enable click reporting
+function enableClickReporting(map) {
+  map.on("click", function (e) {
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+
+    // Save to Firebase
+    set(ref(db, "reports/" + Date.now()), {
+      type: "unsafe spot",
+      lat: lat,
+      lng: lng,
+      timestamp: new Date().toISOString()
+    });
+
+    // Add marker
+    L.marker([lat, lng])
+      .addTo(map)
+      .bindPopup("🚨 Unsafe spot reported!")
+      .openPopup();
+
+    console.log("✅ Report added at", lat, lng);
+  });
+}
+
+// ✅ Export for index.html
+export { map, enableClickReporting };
+

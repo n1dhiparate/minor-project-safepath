@@ -16,58 +16,10 @@
   <!-- Map Container -->
   <div id="map"></div>
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <!-- Our JS Files (keep only non-module scripts here) -->
+  <script src="js/routes.js"></script>
+  <script src="js/ui.js"></script>
 
-  <!-- Our JS Files -->
-  <script src="js/map.js"></script>
-<script src="js/routes.js"></script>
-<script src="js/ui.js"></script>
-
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyBAOf-WBEkrPHm8Np2HNACU-OhLcH_lIN8",
-    authDomain: "safepath-46c12.firebaseapp.com",
-    projectId: "safepath-46c12",
-    storageBucket: "safepath-46c12.firebasestorage.app",
-    messagingSenderId: "422757931012",
-    appId: "1:422757931012:web:aa2284635d50f621d27d51"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-
-  import { collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-
-// Add a test report
-async function addReport() {
-  await addDoc(collection(db, "reports"), {
-    type: "unsafe street",
-    location: { lat: 19.07, lng: 72.87 },
-    timestamp: new Date()
-  });
-  console.log("✅ Report added!");
-}
-
-// Fetch all reports
-async function getReports() {
-  const querySnapshot = await getDocs(collection(db, "reports"));
-  querySnapshot.forEach((doc) => {
-    console.log(doc.id, " => ", doc.data());
-  });
-}
-
-// Run test
-addReport();
-getReports();
-
-</script>
 
 </body>
 </html>
