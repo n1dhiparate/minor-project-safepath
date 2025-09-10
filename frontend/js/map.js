@@ -127,51 +127,51 @@ spots.forEach(spot => {
     .bindPopup(`<b>${spot.name}</b><br>Category: ${spot.category}<br>Status: ${spot.safetyStatus.toUpperCase()}`);
 });
 
-// ✅ Firebase imports
-import { getDatabase, ref, set } 
-  from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-import { initializeApp } 
-  from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+let startMarker = null;
+let destMarker = null;
+let routeLine = null;
 
-// ✅ Firebase config (SAME as index.html)
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "safepath-46c12.firebaseapp.com",
-  databaseURL: "https://safepath-46c12-default-rtdb.firebaseio.com",
-  projectId: "safepath-46c12",
-  storageBucket: "safepath-46c12.appspot.com",
-  messagingSenderId: "422757931012",
-  appId: "1:422757931012:web:aa2284635d50f621d27d51"
-};
-
-// ✅ Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-
-// ✅ Function to enable click reporting
-function enableClickReporting(map) {
-  map.on("click", function (e) {
-    const lat = e.latlng.lat;
-    const lng = e.latlng.lng;
-
-    // Save to Firebase
-    set(ref(db, "reports/" + Date.now()), {
-      type: "unsafe spot",
-      lat: lat,
-      lng: lng,
-      timestamp: new Date().toISOString()
-    });
-
-    // Add marker
-    L.marker([lat, lng])
+map.on('click', function (e) {
+  if (startMarker === null) {
+    // First click → set Start marker
+    startMarker = L.marker(e.latlng, { draggable: true })
+      .bindPopup("Start Point")
       .addTo(map)
-      .bindPopup("🚨 Unsafe spot reported!")
+      .openPopup();
+  } else if (destMarker === null) {
+    // Second click → set Destination marker
+    destMarker = L.marker(e.latlng, { draggable: true })
+      .bindPopup("Destination Point")
+      .addTo(map)
       .openPopup();
 
-    console.log("✅ Report added at", lat, lng);
-  });
+    // Draw line between Start and Destination
+    drawRoute();
+  } else {
+    alert("Start and Destination already set. Drag markers to change, or reset.");
+  }
+});
+
+// Draw polyline between Start and Destination
+function drawRoute() {
+  if (routeLine) {
+    map.removeLayer(routeLine); // remove old line if it exists
+  }
+  if (startMarker && destMarker) {
+    routeLine = L.polyline(
+      [startMarker.getLatLng(), destMarker.getLatLng()],
+      { color: "blue", weight: 4, opacity: 0.7 }
+    ).addTo(map);
+  }
 }
 
-// ✅ Export for index.html
-export { map, enableClickReporting };
+// Reset function (optional)
+function resetMarkers() {
+  if (startMarker) map.removeLayer(startMarker);
+  if (destMarker) map.removeLayer(destMarker);
+  if (routeLine) map.removeLayer(routeLine);
 
+  startMarker = null;
+  destMarker = null;
+  routeLine = null;
+}

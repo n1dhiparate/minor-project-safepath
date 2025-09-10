@@ -13,4 +13,20 @@ h2 {
   height: 100vh;   /* or at least 500px */
   width: 100%;
 }
+.night-btn {
+  position: absolute;
+  top: 80px; 
+  right: 20px;
+  z-index: 1000;
+  background: black;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.night-btn:hover {
+  background: #333;
+}
 
