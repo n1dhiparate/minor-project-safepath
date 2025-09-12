@@ -1,7 +1,7 @@
 // Create map centered on Santacruz
 var map = L.map('map').setView([19.0823, 72.8407], 14);
 
-// Add OpenStreetMap tile layer
+// Add OpenStreetMap tile layer (default)
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
@@ -175,3 +175,31 @@ function resetMarkers() {
   destMarker = null;
   routeLine = null;
 }
+
+
+// Add Legend
+let legend = L.control({ position: "bottomright" });
+
+legend.onAdd = function () {
+  let div = L.DomUtil.create("div", "info legend");
+  let categories = ["Safe", "Caution", "Unsafe"];
+  let colors = ["green", "orange", "red"];
+
+  div.innerHTML += "<h4>Safety Legend</h4>";
+  for (let i = 0; i < categories.length; i++) {
+    div.innerHTML +=
+      '<i style="background:' + colors[i] + '; width:18px; height:18px; display:inline-block; margin-right:5px;"></i>' +
+      categories[i] + "<br>";
+  }
+  return div;
+};
+
+legend.addTo(map);
+
+// Show coordinates on map click
+map.on("click", function (e) {
+  L.popup()
+    .setLatLng(e.latlng)
+    .setContent("Coordinates: " + e.latlng.lat.toFixed(5) + ", " + e.latlng.lng.toFixed(5))
+    .openOn(map);
+});
