@@ -22,15 +22,7 @@ document.getElementById("nightModeBtn").addEventListener("click", () => {
     }
 });
 
-// Day Mode button
-document.getElementById("dayModeBtn").addEventListener("click", () => {
-    if (map.hasLayer(nightTiles)) {
-        map.removeLayer(nightTiles);
-    }
-    if (!map.hasLayer(dayTiles)) {
-        map.addLayer(dayTiles);
-    }
-});
+
 // Locate Me button
 document.getElementById("locateBtn").addEventListener("click", () => {
     map.locate({ setView: true, maxZoom: 16 });
