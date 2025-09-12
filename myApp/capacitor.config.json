@@ -1,0 +1,6 @@
+﻿{
+  "appId": "com.safepath.app",
+  "appName": "safe path",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
