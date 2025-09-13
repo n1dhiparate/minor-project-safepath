@@ -1,6 +1,6 @@
 ﻿{
-  "appId": "com.safepath.app",
-  "appName": "safe path",
-  "webDir": "www",
+  "appId": "com.example.app",
+  "appName": "minorproject",
+  "webDir": "../frontend",
   "bundledWebRuntime": false
 }
