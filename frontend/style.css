@@ -1,31 +1,112 @@
-html, body {
-  height: 100%;
-  margin: 0;
-  font-family: Arial, sans-serif;
-  text-align: center;
-}
+/* base */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; font-family: "Segoe UI", Arial, sans-serif; background:#f4f6f8; color:#222; }
+header { text-align:center; padding:14px 8px 0; }
+h2 { margin: 0 0 8px; font-weight:700; letter-spacing:0.2px; color:#223; }
 
-h2 {
-  margin: 10px 0;
-}
-
+/* map */
 #map {
-  height: 100vh;   /* or at least 500px */
   width: 100%;
-}
-.night-btn {
-  position: absolute;
-  top: 80px; 
-  right: 20px;
-  z-index: 1000;
-  background: black;
-  color: white;
-  border: none;
-  padding: 8px 12px;
-  border-radius: 6px;
-  cursor: pointer;
+  height: calc(100vh - 100px); /* leave space for header/buttons */
+  border-radius: 10px;
+  margin: 12px auto;
+  box-shadow: 0 6px 20px rgba(10,20,30,0.08);
+  overflow: hidden;
 }
 
-.night-btn:hover {
-  background: #333;
+/* floating control container */
+#controls {
+  position: absolute;
+  right: 22px;
+  top: 90px;
+  z-index: 1200;
+  display:flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+}
+
+/* control buttons */
+.control-btn {
+  min-width: 140px;
+  text-align:center;
+  border: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+  transform-origin: center;
+  transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+  opacity: 0.98;
+}
+.control-btn:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 10px 22px rgba(0,0,0,0.16); }
+
+.control-btn.locate { background: #0984e3; }
+.control-btn.route  { background: #00b894; color: #063;}
+.control-btn.clear  { background: #d63031; }
+.control-btn.sos    { background: #ff3b30; }
+.control-btn:active { transform: translateY(0); }
+
+/* filters and info panels */
+.info-panel {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  z-index: 1100;
+  background: rgba(255,255,255,0.98);
+  padding: 14px;
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.08);
+  width: 260px;
+  font-size: 14px;
+}
+.info-panel h3 { margin:0 0 8px; color:#0b7bdc; }
+
+/* route info specific */
+.route-info { bottom: 120px; left: 20px; }
+.route-info p { margin: 8px 0 0; color:#444; }
+
+/* small apply button */
+.small {
+  background:#2d3436; color:#fff; border:none; padding:8px 10px; border-radius:8px; cursor:pointer;
+}
+.small:hover { background:#40484a; }
+
+/* legend (bottom right) inserted by leaflet control uses .legend */
+.info.legend { font-size:13px; padding:8px 10px; background:rgba(255,255,255,0.95); border-radius:8px; box-shadow: 0 6px 18px rgba(0,0,0,0.12);}
+.info.legend h4 { margin:0 0 6px; color:#2d3436; }
+
+/* SOS message visible animation (map.js toggles) */
+.sos-toast {
+  position: absolute;
+  right: 20px;
+  top: 50px;
+  z-index: 1400;
+  background: #ffd54d;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-weight:700;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+}
+
+/* SOS toast notification */
+.sos-toast {
+  position: absolute;
+  right: 20px;
+  top: 50px;
+  z-index: 1400;
+  background: #ffd54d;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-weight:700;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  animation: fadeInOut 2s forwards;
+}
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translateY(-10px);}
+  10% { opacity: 1; transform: translateY(0);}
+  90% { opacity: 1;}
+  100% { opacity: 0; transform: translateY(-10px);}
 }

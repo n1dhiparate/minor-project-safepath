@@ -1,41 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>SafePath Map</title>
   <link rel="stylesheet" href="style.css">
-
-  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 </head>
 <body>
-  <h2>SafePath – Safety-Based Navigation</h2>
-  <button id="nightModeBtn" class="night-btn">🌙 Night Mode</button>
-<<<<<<< HEAD
-  <button id="locateBtn" class="locate-btn">📍 Locate Me</button>
-  <button id="routeBtn" class="route-btn">🛣️ Get Route</button>
-  <button id="clearBtn" class="clear-btn">❌ Clear Map</button>
-=======
+  <header>
+    <h2>SafePath – Safety-Based Navigation</h2>
+  </header>
 
->>>>>>> 5ee79115ab6e8f73061224e3b25ecd8aea86ffa3
-  <div id="infoPanel" class="info-panel">
-    
+  <div id="controls">
+    <button id="nightModeBtn" class="control-btn">🌙 Night Mode</button>
+    <button id="locateBtn" class="control-btn locate">📍 Locate Me</button>
+    <button id="getRouteBtn" class="control-btn route">🛣️ Get Route</button>
+    <button id="clearBtn" class="control-btn clear">❌ Clear Map</button>
+    <button id="sosButton" class="control-btn sos">🚨 SOS</button>
+  </div>
+
+  <div id="filters" class="info-panel">
+    <h3>Filters</h3>
+    <div><label><input type="checkbox" class="cat-filter" value="bus" checked> Bus</label></div>
+    <div><label><input type="checkbox" class="cat-filter" value="police" checked> Police</label></div>
+    <div><label><input type="checkbox" class="cat-filter" value="hospital" checked> Hospital</label></div>
+    <div><label><input type="checkbox" class="cat-filter" value="school" checked> School</label></div>
+    <div><label><input type="checkbox" class="cat-filter" value="college" checked> College</label></div>
+    <div><label><input type="checkbox" class="cat-filter" value="market" checked> Market</label></div>
+    <div><label><input type="checkbox" class="cat-filter" value="restaurant" checked> Restaurant</label></div>
+    <div><label><input type="checkbox" class="cat-filter" value="temple" checked> Temple</label></div>
+    <div style="margin-top:8px;"><button id="applyFilters" class="small">Apply</button></div>
+  </div>
+
+  <div id="routeInfoCard" class="info-panel route-info">
     <h3>Route Information</h3>
     <p id="routeInfo">No route calculated.</p>
   </div>
-  
-  
 
-  <!-- Map Container -->
   <div id="map"></div>
 
-  <!-- Our JS Files (keep only non-module scripts here) -->
-  <script src="js/routes.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/map.js"></script>
-
-
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script type="module" src="js/map.js"></script>
+  <script type="module" src="js/routes.js"></script>
+  <script type="module" src="js/ui.js"></script>
 </body>
 </html>

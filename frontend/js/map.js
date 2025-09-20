@@ -1,15 +1,21 @@
-// Create map centered on Santacruz
-var map = L.map('map').setView([19.0823, 72.8407], 14);
+import { db, getDocs, collection } from "./firebase.js";
 
-// Add OpenStreetMap tile layer (default)
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap contributors'
+export const map = L.map("map").setView([19.0823, 72.8407], 14);
+
+export const dayTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 
-// Add zoom controls
+export const nightTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO'
+});
+
 L.control.zoom({ position: 'topright' }).addTo(map);
 
-// 50+ Safe & Unsafe Spots in Santacruz
+
+// ================== Static Spots (Santacruz dataset) ==================
+
+
 var spots = [
   // 🚉 Stations & Bus Depots
   { name:"Santacruz Railway Station", lat:19.0817, lng:72.8410, category:"station", safetyStatus:"caution" },
@@ -114,92 +120,47 @@ var spots = [
   { name:"Spot J", lat:19.08613582954777, lng:72.83519510710131, category:"other", safetyStatus:"safe" }
 ];
 
+
+export const spotMarkers = [];
+
+// Add all spots to map with color
 spots.forEach(spot => {
-  var color = (spot.safetyStatus === "safe") ? "green" : 
-              (spot.safetyStatus === "caution") ? "orange" : "red";
-
-  L.circle([spot.lat, spot.lng], {
-    color: color,
-    fillColor: color,
-    fillOpacity: 0.4,
-    radius: 40
-  }).addTo(map)
-    .bindPopup(`<b>${spot.name}</b><br>Category: ${spot.category}<br>Status: ${spot.safetyStatus.toUpperCase()}`);
+  const color = spot.safetyStatus === "safe" ? "green" : spot.safetyStatus === "caution" ? "orange" : "red";
+  const marker = L.circle([spot.lat, spot.lng], { color, fillColor: color, fillOpacity:0.5, radius:40 })
+    .bindPopup(`<b>${spot.name}</b><br>Category: ${spot.category}<br>Status: ${spot.safetyStatus.toUpperCase()}`)
+    .addTo(map);
+  spotMarkers.push({ spot, marker });
 });
 
-let startMarker = null;
-let destMarker = null;
-let routeLine = null;
-
-map.on('click', function (e) {
-  if (startMarker === null) {
-    // First click → set Start marker
-    startMarker = L.marker(e.latlng, { draggable: true })
-      .bindPopup("Start Point")
-      .addTo(map)
-      .openPopup();
-  } else if (destMarker === null) {
-    // Second click → set Destination marker
-    destMarker = L.marker(e.latlng, { draggable: true })
-      .bindPopup("Destination Point")
-      .addTo(map)
-      .openPopup();
-
-    // Draw line between Start and Destination
-    drawRoute();
-  } else {
-    alert("Start and Destination already set. Drag markers to change, or reset.");
-  }
-});
-
-// Draw polyline between Start and Destination
-function drawRoute() {
-  if (routeLine) {
-    map.removeLayer(routeLine); // remove old line if it exists
-  }
-  if (startMarker && destMarker) {
-    routeLine = L.polyline(
-      [startMarker.getLatLng(), destMarker.getLatLng()],
-      { color: "blue", weight: 4, opacity: 0.7 }
-    ).addTo(map);
-  }
-}
-
-// Reset function (optional)
-function resetMarkers() {
-  if (startMarker) map.removeLayer(startMarker);
-  if (destMarker) map.removeLayer(destMarker);
-  if (routeLine) map.removeLayer(routeLine);
-
-  startMarker = null;
-  destMarker = null;
-  routeLine = null;
-}
-
-
-// Add Legend
-let legend = L.control({ position: "bottomright" });
-
-legend.onAdd = function () {
-  let div = L.DomUtil.create("div", "info legend");
-  let categories = ["Safe", "Caution", "Unsafe"];
-  let colors = ["green", "orange", "red"];
-
+// ===== Legend =====
+const legend = L.control({position: 'bottomright'});
+legend.onAdd = function() {
+  const div = L.DomUtil.create('div', 'info legend');
+  const categories = ["Safe", "Caution", "Unsafe"];
+  const colors = ["green","orange","red"];
   div.innerHTML += "<h4>Safety Legend</h4>";
-  for (let i = 0; i < categories.length; i++) {
-    div.innerHTML +=
-      '<i style="background:' + colors[i] + '; width:18px; height:18px; display:inline-block; margin-right:5px;"></i>' +
-      categories[i] + "<br>";
-  }
+  categories.forEach((cat,i)=>{
+    div.innerHTML += `<i style="background:${colors[i]}; width:18px; height:18px; display:inline-block; margin-right:5px;"></i>${cat}<br>`;
+  });
   return div;
 };
-
 legend.addTo(map);
 
-// Show coordinates on map click
-map.on("click", function (e) {
-  L.popup()
-    .setLatLng(e.latlng)
-    .setContent("Coordinates: " + e.latlng.lat.toFixed(5) + ", " + e.latlng.lng.toFixed(5))
-    .openOn(map);
-});
+// ===== Firebase Reports =====
+export async function loadReports() {
+  try {
+    const snapshot = await getDocs(collection(db,"reports"));
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const spot = spots.find(s=>s.name===data.location);
+      if(spot){
+        const color = data.dangerLevel==="SAFE"?"green":data.dangerLevel==="CAUTION"?"orange":"red";
+        L.circle([spot.lat,spot.lng],{color,fillColor:color,fillOpacity:0.6,radius:50})
+          .addTo(map)
+          .bindPopup(`<b>${data.location}</b><br>Report Status: ${data.dangerLevel}`);
+      }
+    });
+  } catch(e){
+    console.error("Failed to load reports:",e);
+  }
+}
