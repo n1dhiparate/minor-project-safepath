@@ -1,4 +1,4 @@
-import { db, getDocs, collection } from "./firebase.js";
+import { db, getDocs, collection } from "../../backend/firebase.js";
 
 export const map = L.map("map").setView([19.0823, 72.8407], 14);
 
