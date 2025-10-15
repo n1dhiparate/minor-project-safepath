@@ -2,6 +2,7 @@ import { db, getDocs, collection } from "../../backend/firebase.js";
 
 export const map = L.map("map").setView([19.0823, 72.8407], 14);
 
+
 export const dayTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
