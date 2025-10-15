@@ -1,17 +1,38 @@
-import { db, getDocs, collection } from "./backend/firebase.js";
+// ✅ Import Firebase directly from CDN instead of local file
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  getDocs
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
+// ✅ Your Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyD__dtg2e10sUZygT1i_gRpvLXpwgV-uRg",
+  authDomain: "safe-path-mnm.firebaseapp.com",
+  databaseURL: "https://safe-path-mnm-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "safe-path-mnm",
+  storageBucket: "safe-path-mnm.firebasestorage.app",
+  messagingSenderId: "159592505825",
+  appId: "1:159592505825:web:3930c17cdfc0dfaa9f72a0"
+};
+
+// ✅ Initialize Firebase + Firestore
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ✅ Map initialization
 export const map = L.map("map").setView([19.0823, 72.8407], 14);
 
-
-export const dayTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
+export const dayTiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "&copy; OpenStreetMap contributors",
 }).addTo(map);
 
-export const nightTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap &copy; CARTO'
+export const nightTiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+  attribution: "&copy; OpenStreetMap &copy; CARTO",
 });
 
-L.control.zoom({ position: 'topright' }).addTo(map);
+L.control.zoom({ position: "topright" }).addTo(map);
 
 
 // ================== Static Spots (Santacruz dataset) ==================

@@ -1,6 +1,6 @@
 import { map, dayTiles, nightTiles } from "./map.js";
 import { resetMarkers } from "./routes.js";
-import { db, collection, addDoc } from "../../backend/firebase.js";
+import { db, collection, addDoc } from "../backend/firebase.js";
 
 // Night Mode
 document.getElementById("nightModeBtn").addEventListener("click",()=>{
