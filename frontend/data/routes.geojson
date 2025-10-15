@@ -3,13 +3,16 @@
   "features": [
     {
       "type": "Feature",
-      "properties": { "name": "Route 1" },
+      "properties": {
+        "name": "Safe Route 1"
+      },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [72.8407, 19.0823],
-          [72.8415, 19.0850],
-          [72.8430, 19.0880]
+          [77.5946, 12.9716],
+          [77.5950, 12.9720],
+          [77.5960, 12.9730],
+          [77.5970, 12.9740]
         ]
       }
     }

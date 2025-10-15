@@ -1,5 +1,9 @@
 import { map, spots } from "./map.js";
 
+// Ensure Leaflet is available
+// If using a module system, import Leaflet as below, otherwise make sure L is globally available
+// import L from 'leaflet';
+
 let startMarker=null, destMarker=null, routeLine=null;
 
 map.on('click', e=>{
@@ -21,7 +25,8 @@ export function drawRoute(){
       unsafe.forEach(s=>{if(map.distance(p,[s.lat,s.lng])<50) score="Unsafe";});
       caution.forEach(s=>{if(map.distance(p,[s.lat,s.lng])<50 && score!=="Unsafe") score="Caution";});
     });
-    document.getElementById("routeInfo").innerText=`Route Safety: ${score}`;
+    const routeInfoElem = document.getElementById("routeInfo");
+    if(routeInfoElem) routeInfoElem.innerText=`Route Safety: ${score}`;
   }
 }
 
@@ -30,6 +35,8 @@ export function resetMarkers(){
   if(destMarker) map.removeLayer(destMarker);
   if(routeLine) map.removeLayer(routeLine);
   startMarker=destMarker=routeLine=null;
-  document.getElementById("routeInfo").innerText="No route calculated.";
+  const routeInfoElem = document.getElementById("routeInfo");
+  if(routeInfoElem) routeInfoElem.innerText="No route calculated.";
 }
-document.getElementById("clearBtn").addEventListener("click", resetMarkers);
+const clearBtnElem = document.getElementById("clearBtn");
+if(clearBtnElem) clearBtnElem.addEventListener("click", resetMarkers);
