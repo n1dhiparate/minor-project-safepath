@@ -1,0 +1,20 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Safe Route 1"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [77.5946, 12.9716],
+          [77.5950, 12.9720],
+          [77.5960, 12.9730],
+          [77.5970, 12.9740]
+        ]
+      }
+    }
+  ]
+}
