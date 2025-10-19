@@ -1,8 +1,10 @@
 import React, { useState } from "react";
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from "react-native";
 import MapView, { Marker } from "react-native-maps";
+import SplashScreen from "./screens/splashscreen";
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
   const [nightMode, setNightMode] = useState(false);
   const [filters, setFilters] = useState({
     bus: true,
@@ -19,11 +21,17 @@ export default function App() {
     setFilters({ ...filters, [key]: !filters[key] });
   };
 
+  if (showSplash) {
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+  }
+
   return (
     <View style={[styles.container, nightMode && { backgroundColor: "#222" }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.heading, nightMode && { color: "#fff" }]}>SafePath – Safety-Based Navigation</Text>
+        <Text style={[styles.heading, nightMode && { color: "#fff" }]}>
+          SafePath – Safety-Based Navigation
+        </Text>
       </View>
 
       {/* Map */}
@@ -69,7 +77,9 @@ export default function App() {
         <ScrollView>
           {Object.keys(filters).map((key) => (
             <View key={key} style={styles.filterRow}>
-              <Text style={[styles.filterText, nightMode && { color: "#fff" }]}>{key.charAt(0).toUpperCase() + key.slice(1)}</Text>
+              <Text style={[styles.filterText, nightMode && { color: "#fff" }]}>
+                {key.charAt(0).toUpperCase() + key.slice(1)}
+              </Text>
               <Switch
                 value={filters[key]}
                 onValueChange={() => toggleFilter(key)}
