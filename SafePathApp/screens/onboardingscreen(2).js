@@ -18,13 +18,13 @@ export default function Onboarding({ navigation }) {
   const slides = [
     {
       title: "SafePath",
-      subtitle: "Safety-Based Navigation",
+      subtitle: "Safety-Based Navigation for Women",
       description:
-        "🚶‍♀️ Prioritize safety over shortest or fastest routes.\n\n" +
-        "🔒 Real-time crowdsourced data to mark safe and unsafe areas.\n\n" +
-        "🌃 Safety scoring for night routes.\n\n" +
-        "🚨 Emergency tools like SOS alerts & shake-to-share location.\n\n" +
-        "📶 Offline access to trusted safe places.",
+        "1. Prioritize safety over shortest or fastest routes.\n\n" +
+        "2. Real-time crowdsourced data to mark safe and unsafe areas.\n\n" +
+        "3. Safety scoring for night routes.\n\n" +
+        "4. Emergency tools like SOS alerts & shake-to-share location.\n\n" +
+        "5. Offline access to trusted safe places.",
     },
   ];
 
