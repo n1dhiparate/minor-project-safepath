@@ -2,9 +2,12 @@
 import React, { useState, useEffect } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+
+// ✅ Firebase imports
 import { auth } from "./firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
 
+// ✅ Screen imports
 import SplashScreen from "./screens/splashscreen";
 import Onboarding from "./screens/onboardingscreen(2)";
 import Login from "./screens/login";
@@ -28,11 +31,17 @@ export default function App() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Splash">
+      <Stack.Navigator
+        screenOptions={{ headerShown: false }}
+        initialRouteName="Splash"
+      >
         {/* Splash Screen */}
         <Stack.Screen name="Splash">
           {(props) => (
-            <SplashScreen {...props} onFinish={() => props.navigation.replace("Onboarding")} />
+            <SplashScreen
+              {...props}
+              onFinish={() => props.navigation.replace("Onboarding")}
+            />
           )}
         </Stack.Screen>
 
@@ -42,7 +51,9 @@ export default function App() {
             <Onboarding
               {...props}
               onFinish={() =>
-                user ? props.navigation.replace("Home") : props.navigation.replace("Login")
+                user
+                  ? props.navigation.replace("Home")
+                  : props.navigation.replace("Login")
               }
             />
           )}

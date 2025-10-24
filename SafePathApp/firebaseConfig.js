@@ -1,16 +1,24 @@
-// Import the functions you need from the SDKs
+// Import Firebase functions
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// Your Firebase configuration
+// Import environment variables from .env
+import { 
+  EXPO_PUBLIC_FIREBASE_API_KEY, 
+  EXPO_MNM_PROJECT_ID, 
+  EXPO_MNM_MESSAGING_SENDER_ID, 
+  EXPO_MNM_APP_ID 
+} from '@env';
+
+// Firebase configuration using env variables
 const firebaseConfig = {
-  apiKey: "AIzaSyCxLd97p6yVqOAm61W1Ooze_ejI1sDPvNk",
-  authDomain: "safepathapp.firebaseapp.com",
-  projectId: "safepathapp",
-  storageBucket: "safepathapp.firebasestorage.app",
-  messagingSenderId: "574601310005",
-  appId: "1:574601310005:web:135a38199601276977e67c",
+  apiKey: EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: `${EXPO_MNM_PROJECT_ID}.firebaseapp.com`,
+  projectId: EXPO_MNM_PROJECT_ID,
+  storageBucket: `${EXPO_MNM_PROJECT_ID}.appspot.com`,
+  messagingSenderId: EXPO_MNM_MESSAGING_SENDER_ID,
+  appId: EXPO_MNM_APP_ID,
 };
 
 // Initialize Firebase
@@ -20,4 +28,5 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
+// Default export
 export default app;
