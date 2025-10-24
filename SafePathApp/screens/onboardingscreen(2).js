@@ -1,3 +1,4 @@
+// screens/Onboarding.js
 import React, { useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Dimensions } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -66,7 +67,7 @@ export default function Onboarding({ navigation }) {
       {/* Get Started Button */}
       <TouchableOpacity
         activeOpacity={0.85}
-        onPress={() => navigation.replace("Home")}
+        onPress={() => navigation.replace("Login")} // make sure the screen name matches App.js
         style={{ width: "100%", alignItems: "center", marginBottom: 30 }}
       >
         <LinearGradient

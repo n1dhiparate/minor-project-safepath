@@ -1,48 +1,57 @@
-import React, { useState } from "react";
+// App.js
+import React, { useState, useEffect } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { auth } from "./firebaseConfig";
+import { onAuthStateChanged } from "firebase/auth";
 
 import SplashScreen from "./screens/splashscreen";
 import Onboarding from "./screens/onboardingscreen(2)";
-import Home from "./screens/Home"; // your full-featured Home
+import Login from "./screens/login";
+import Home from "./screens/Home";
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [initializing, setInitializing] = useState(true);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (initializing) setInitializing(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  if (initializing) return null;
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {showSplash && (
-          <Stack.Screen name="Splash">
-            {props => (
-              <SplashScreen
-                {...props}
-                onFinish={() => {
-                  setShowSplash(false);
-                  setShowOnboarding(true);
-                }}
-              />
-            )}
-          </Stack.Screen>
-        )}
+      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Splash">
+        {/* Splash Screen */}
+        <Stack.Screen name="Splash">
+          {(props) => (
+            <SplashScreen {...props} onFinish={() => props.navigation.replace("Onboarding")} />
+          )}
+        </Stack.Screen>
 
-        {showOnboarding && (
-          <Stack.Screen name="Onboarding">
-            {props => (
-              <Onboarding
-                {...props}
-                onFinish={() => {
-                  setShowOnboarding(false);
-                  props.navigation.replace("Home");
-                }}
-              />
-            )}
-          </Stack.Screen>
-        )}
+        {/* Onboarding Screen */}
+        <Stack.Screen name="Onboarding">
+          {(props) => (
+            <Onboarding
+              {...props}
+              onFinish={() =>
+                user ? props.navigation.replace("Home") : props.navigation.replace("Login")
+              }
+            />
+          )}
+        </Stack.Screen>
 
+        {/* Login Screen */}
+        <Stack.Screen name="Login" component={Login} />
+
+        {/* Home Screen */}
         <Stack.Screen name="Home" component={Home} />
       </Stack.Navigator>
     </NavigationContainer>
