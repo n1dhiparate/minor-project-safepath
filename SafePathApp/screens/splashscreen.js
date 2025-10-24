@@ -15,17 +15,18 @@ export default function SplashScreen({ onFinish }) {
   const bounceValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Bounce animation loop
     const bounce = () => {
       Animated.sequence([
         Animated.timing(bounceValue, {
           toValue: -15, // bounce up
-          duration: 1000, // slower
+          duration: 1000, // slower bounce
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(bounceValue, {
           toValue: 0, // back to original
-          duration: 1000, // slower
+          duration: 1000,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
@@ -34,7 +35,13 @@ export default function SplashScreen({ onFinish }) {
 
     bounce();
 
-    const timer = setTimeout(() => onFinish(), 3000);
+    // Call onFinish safely after 3 seconds
+    const timer = setTimeout(() => {
+      if (onFinish && typeof onFinish === "function") {
+        onFinish();
+      }
+    }, 3000);
+
     return () => clearTimeout(timer);
   }, []);
 

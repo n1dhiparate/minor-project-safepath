@@ -4,29 +4,46 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import SplashScreen from "./screens/splashscreen";
 import Onboarding from "./screens/onboardingscreen(2)";
-import Home from "./screens/Home";
+import Home from "./screens/Home"; // your full-featured Home
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {showSplash ? (
-          // Splash first
+        {showSplash && (
           <Stack.Screen name="Splash">
-            {props => <SplashScreen {...props} onFinish={() => setShowSplash(false)} />}
+            {props => (
+              <SplashScreen
+                {...props}
+                onFinish={() => {
+                  setShowSplash(false);
+                  setShowOnboarding(true);
+                }}
+              />
+            )}
           </Stack.Screen>
-        ) : (
-          <>
-            {/* Onboarding second */}
-            <Stack.Screen name="Onboarding" component={Onboarding} />
-            {/* Main home */}
-            <Stack.Screen name="Home" component={Home} />
-          </>
         )}
+
+        {showOnboarding && (
+          <Stack.Screen name="Onboarding">
+            {props => (
+              <Onboarding
+                {...props}
+                onFinish={() => {
+                  setShowOnboarding(false);
+                  props.navigation.replace("Home");
+                }}
+              />
+            )}
+          </Stack.Screen>
+        )}
+
+        <Stack.Screen name="Home" component={Home} />
       </Stack.Navigator>
     </NavigationContainer>
   );
