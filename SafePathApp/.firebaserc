@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "SP": "safepathapp",
+    "default": "safepathapp"
+  },
+  "targets": {},
+  "etags": {}
+}
