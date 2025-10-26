@@ -68,6 +68,12 @@ export default function SplashScreen({ onFinish }) {
         <Text style={styles.appName}>SAFEPATH</Text>
         <Text style={styles.tagline}>Safety-Based Navigation for Women</Text>
       </View>
+
+      {/* 🌿 Footer */}
+      <View style={styles.footer}>
+        <View style={styles.footerDivider} />
+        <Text style={styles.footerText}>SafePath | 2025</Text>
+      </View>
     </LinearGradient>
   );
 }
@@ -110,5 +116,23 @@ const styles = StyleSheet.create({
     color: colors.tagline,
     textAlign: "center",
     lineHeight: 20,
+  },
+  footer: {
+    position: "absolute",
+    bottom: 20,
+    alignItems: "center",
+    width: "100%",
+  },
+  footerDivider: {
+    width: "40%",
+    height: 1,
+    backgroundColor: "rgba(0,0,0,0.1)",
+    marginBottom: 6,
+  },
+  footerText: {
+    fontSize: 13,
+    color: "rgba(68,68,68,0.8)",
+    opacity: 0.85,
+    letterSpacing: 0.5,
   },
 });

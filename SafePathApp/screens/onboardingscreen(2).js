@@ -1,6 +1,14 @@
-// screens/Onboarding.js
-import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Dimensions } from "react-native";
+// screens/onboardingscreen(2).js
+import React, { useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  ScrollView,
+  Animated,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
 const colors = {
@@ -11,140 +19,173 @@ const colors = {
   text: "#444444",
 };
 
-const { width } = Dimensions.get("window");
+export default function Onboarding({ onFinish }) {
+  const bounceAnim = useRef(new Animated.Value(0)).current;
 
-export default function Onboarding({ navigation }) {
-  const [scrollX] = useState(new Animated.Value(0));
-
-  const slides = [
-    {
-      title: "SafePath",
-      subtitle: "Safety-Based Navigation for Women",
-      description:
-        "1. Prioritize safety over shortest or fastest routes.\n\n" +
-        "2. Real-time crowdsourced data to mark safe and unsafe areas.\n\n" +
-        "3. Safety scoring for night routes.\n\n" +
-        "4. Emergency tools like SOS alerts & shake-to-share location.\n\n" +
-        "5. Offline access to trusted safe places.",
-    },
-  ];
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(bounceAnim, {
+          toValue: -10,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(bounceAnim, {
+          toValue: 0,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [bounceAnim]);
 
   return (
-    <LinearGradient colors={[colors.primary, colors.accent]} style={styles.container}>
-      <ScrollView
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-          useNativeDriver: false,
-        })}
-        scrollEventThrottle={16}
-        contentContainerStyle={{ alignItems: "center" }}
-      >
-        {slides.map((slide, index) => (
-          <View key={index} style={styles.slide}>
-            <Text style={styles.title}>{slide.title}</Text>
-            <Text style={styles.subtitle}>{slide.subtitle}</Text>
-            <View style={styles.card}>
-              <Text style={styles.text}>{slide.description}</Text>
-            </View>
-          </View>
-        ))}
+    <LinearGradient colors={[colors.primary, colors.accent]} style={styles.gradient}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        {/* 🌸 Logo / Image with bounce */}
+        <Animated.View
+          style={[
+            {
+              transform: [{ translateY: bounceAnim }],
+              backgroundColor: "#ffffff",
+              borderRadius: 12, // subtle roundness
+              padding: 10,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.1,
+              shadowRadius: 17,
+              elevation: 8, // Android shadow
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: 10,
+            },
+          ]}
+        >
+          <Image
+            source={require("../assets/images/safepath_logo.png")}
+            style={{
+              width: 140,
+              height: 140,
+              borderRadius: 8, // slight soft edge
+            }}
+            resizeMode="contain"
+          />
+        </Animated.View>
+
+        {/* 🌸 Title */}
+        <Text style={styles.title}>Welcome to SafePath</Text>
+        <Text style={styles.subtitle}>Safety-Based Navigation for Women.</Text>
+
+        {/* 🌸 Key Points */}
+        <View style={styles.card}>
+          <Text style={styles.point}>
+            1. Navigate with safety as your first priority, not just speed or distance.
+          </Text>
+          <Text style={styles.point}>
+            2. Get real-time updates on safe and unsafe zones with detailed visuals.
+          </Text>
+          <Text style={styles.point}>
+            3. View area safety ratings based on lighting, CCTV presence, and past reports.
+          </Text>
+          <Text style={styles.point}>
+            4. Use smart SOS and shake-to-share emergency tools when you feel unsafe.
+          </Text>
+          <Text style={styles.point}>
+            5. Access verified safe spots, like police stations or open stores, even offline.
+          </Text>
+        </View>
+
+        {/* 🌸 Get Started Button */}
+        <TouchableOpacity onPress={onFinish} activeOpacity={0.85}>
+          <LinearGradient
+            colors={[colors.buttons, "#7fae8f"]}
+            start={[0, 0]}
+            end={[1, 0]}
+            style={styles.button}
+          >
+            <Text style={styles.buttonText}>Get Started</Text>
+          </LinearGradient>
+        </TouchableOpacity>
       </ScrollView>
 
-      {/* Pagination Dots */}
-      <View style={styles.pagination}>
-        {slides.map((_, i) => {
-          const dotOpacity = scrollX.interpolate({
-            inputRange: [(i - 1) * width, i * width, (i + 1) * width],
-            outputRange: [0.3, 1, 0.3],
-            extrapolate: "clamp",
-          });
-          return <Animated.View key={i} style={[styles.dot, { opacity: dotOpacity }]} />;
-        })}
+      {/* 🌿 Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>SafePath | 2025 </Text>
       </View>
-
-      {/* Get Started Button */}
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={() => navigation.replace("Login")} // make sure the screen name matches App.js
-        style={{ width: "100%", alignItems: "center", marginBottom: 30 }}
-      >
-        <LinearGradient
-          colors={[colors.buttons, "#7fae8f"]}
-          start={[0, 0]}
-          end={[1, 0]}
-          style={styles.button}
-        >
-          <Text style={styles.buttonText}>Get Started</Text>
-        </LinearGradient>
-      </TouchableOpacity>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  slide: {
-    width: width,
-    paddingHorizontal: 30,
+  gradient: { flex: 1 },
+  container: {
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: 25,
+  },
+  image: {
+    width: 180, // smaller logo
+    height: 180,
+    marginTop: 30,
+    marginBottom: 15,
   },
   title: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: "bold",
     color: colors.text,
     textAlign: "center",
-    marginBottom: 4,
   },
   subtitle: {
-    fontSize: 18,
-    color: "#6b6b6b",
+    fontSize: 16,
+    color: "#555",
     textAlign: "center",
     marginBottom: 20,
+    paddingHorizontal: 15,
   },
   card: {
     backgroundColor: colors.background,
     borderRadius: 20,
-    padding: 25,
+    padding: 22,
+    marginBottom: 40,
+    width: "100%",
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+  },
+  point: {
+    fontSize: 15,
+    color: "#444",
+    marginBottom: 10,
+    lineHeight: 22,
+  },
+  button: {
+    paddingVertical: 15,
+    borderRadius: 25,
+    alignItems: "center",
+    width: 200,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-    width: "100%",
-  },
-  text: {
-    fontSize: 16,
-    color: colors.text,
-    lineHeight: 26,
-  },
-  button: {
-    paddingVertical: 18,
-    paddingHorizontal: 120,
-    borderRadius: 30,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 5,
   },
   buttonText: {
     color: colors.background,
-    fontSize: 18,
     fontWeight: "bold",
+    fontSize: 18,
   },
-  pagination: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginVertical: 20,
+  footer: {
+    position: "absolute",
+    bottom: 15,
+    alignItems: "center",
+    width: "100%",
   },
-  dot: {
-    height: 10,
-    width: 10,
-    borderRadius: 5,
-    backgroundColor: colors.buttons,
-    marginHorizontal: 6,
+  footerText: {
+    fontSize: 13,
+    color: "#555",
+    opacity: 0.8,
+    letterSpacing: 0.5,
   },
 });
