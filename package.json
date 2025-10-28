@@ -4,5 +4,10 @@
     "expo-auth-session": "^7.0.8",
     "expo-random": "^14.0.1",
     "expo-web-browser": "~15.0.8"
+  },
+  "devDependencies": {
+    "@babel/plugin-proposal-nullish-coalescing-operator": "^7.18.6",
+    "@babel/plugin-proposal-optional-chaining": "^7.21.0",
+    "@babel/plugin-transform-template-literals": "^7.27.1"
   }
 }

@@ -8,7 +8,10 @@ module.exports = function(api) {
         "path": ".env",
         "safe": false,
         "allowUndefined": true
-      }]
-    ]
+      }],
+      '@babel/plugin-proposal-optional-chaining',
+      '@babel/plugin-proposal-nullish-coalescing-operator',
+      '@babel/plugin-transform-template-literals', // ✅ add this line
+    ],
   };
 };

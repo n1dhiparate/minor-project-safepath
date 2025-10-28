@@ -61,11 +61,11 @@ export default function Onboarding({ onFinish }) {
             },
           ]}
         >
-          <Image
+          <Image   //change logo size from here 
             source={require("../assets/images/safepath_logo.png")}
             style={{
-              width: 140,
-              height: 140,
+              width: 110,
+              height: 110,
               borderRadius: 8, // slight soft edge
             }}
             resizeMode="contain"
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 25,
+    padding: 15,
   },
   image: {
     width: 180, // smaller logo
@@ -130,20 +130,20 @@ const styles = StyleSheet.create({
     marginTop: 30,
     marginBottom: 15,
   },
-  title: {
-    fontSize: 32,
+  title: { //welcome to safepath size
+    fontSize: 30,
     fontWeight: "bold",
     color: colors.text,
     textAlign: "center",
   },
-  subtitle: {
-    fontSize: 16,
+  subtitle: { //safety based navigation size 
+    fontSize: 14,
     color: "#555",
     textAlign: "center",
     marginBottom: 20,
     paddingHorizontal: 15,
   },
-  card: {
+  card: { //navigation box 
     backgroundColor: colors.background,
     borderRadius: 20,
     padding: 22,
