@@ -14,6 +14,8 @@ import * as Location from "expo-location";
 import { Magnetometer } from "expo-sensors"; // ✅ Added
 import { Feather, MaterialIcons } from "@expo/vector-icons";
 import { GOOGLE_MAPS_API_KEY } from "@env";
+import { unsafeSpots } from "../data/unsafeSpots";
+
 
 const { width } = Dimensions.get("window");
 
@@ -112,6 +114,33 @@ export default function Home() {
       ).start();
     }
   };
+  // Santacruz fixed map region
+const santacruzRegion = {
+  latitude: 19.0817,
+  longitude: 72.8410,
+  latitudeDelta: 0.03,
+  longitudeDelta: 0.03,
+};
+
+// State for safety score
+const [safetyScore, setSafetyScore] = useState(null);
+
+// Function to calculate area safety score
+const calculateSafetyScore = () => {
+  let safeCount = 0, cautionCount = 0, unsafeCount = 0;
+
+  unsafeSpots.forEach((spot) => {
+    if (spot.safetyStatus === "safe") safeCount++;
+    else if (spot.safetyStatus === "caution") cautionCount++;
+    else if (spot.safetyStatus === "unsafe") unsafeCount++;
+  });
+
+  const total = safeCount + cautionCount + unsafeCount;
+  const raw = (safeCount * 2 + cautionCount * 1 - unsafeCount * 2) / total;
+  const normalized = Math.max(0, Math.min(10, ((raw + 2) / 4) * 10));
+  setSafetyScore(normalized.toFixed(1));
+};
+
 
   return (
     <View style={{ flex: 1 }}>
@@ -124,6 +153,23 @@ export default function Home() {
           longitudeDelta: 0.05,
         }}
       >
+        {/* ✅ Santacruz Unsafe Spots */}
+{unsafeSpots.map((spot, i) => (
+  <Marker
+    key={i}
+    coordinate={{ latitude: spot.lat, longitude: spot.lng }}
+    title={spot.name}
+    description={`${spot.category} • ${spot.safetyStatus}`}
+    pinColor={
+      spot.safetyStatus === "safe"
+        ? "green"
+        : spot.safetyStatus === "caution"
+        ? "yellow"
+        : "red"
+    }
+  />
+))}
+
         {location && (
           <Marker
             coordinate={{
@@ -134,6 +180,23 @@ export default function Home() {
           />
         )}
       </MapView>
+
+{/* ✅ Santacruz Unsafe Spots */}
+{unsafeSpots.map((spot, i) => (
+  <Marker
+    key={i}
+    coordinate={{ latitude: spot.lat, longitude: spot.lng }}
+    title={spot.name}
+    description={`${spot.category} • ${spot.safetyStatus}`}
+    pinColor={
+      spot.safetyStatus === "safe"
+        ? "green"
+        : spot.safetyStatus === "caution"
+        ? "yellow"
+        : "red"
+    }
+  />
+))}
 
       {/* SEARCH BAR */}
       <View style={styles.topBar}>
