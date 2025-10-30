@@ -11,11 +11,11 @@ import {
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
-import { Magnetometer } from "expo-sensors"; // ✅ Added
+import { Magnetometer } from "expo-sensors";
 import { Feather, MaterialIcons } from "@expo/vector-icons";
 import { GOOGLE_MAPS_API_KEY } from "@env";
-import { unsafeSpots } from "../data/unsafeSpots";
-
+import { unsafeSpots } from "../assets/data/unsafeSpots";
+import Papa from "papaparse";
 
 const { width } = Dimensions.get("window");
 
@@ -25,23 +25,26 @@ const colors = {
   background: "#FFF9F0",
   buttons: "#9BB8AD",
   text: "#444444",
+  crimeMarker: "#800080", // purple for crime CSV
 };
 
 export default function Home() {
   const [location, setLocation] = useState(null);
   const [query, setQuery] = useState("");
   const [predictions, setPredictions] = useState([]);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const micAnim = useRef(new Animated.Value(1)).current;
-  const drawerAnim = useRef(new Animated.Value(-width * 0.7)).current;
-
-  // ✅ Floating Menu
   const [menuOpen, setMenuOpen] = useState(false);
-
-  // ✅ Compass State
+  const [isListening, setIsListening] = useState(false);
   const [heading, setHeading] = useState(0);
+  const [safetyData, setSafetyData] = useState([]);
 
+  const micAnim = useRef(new Animated.Value(1)).current;
+
+  const csvUrls = [
+    { url: "https://raw.githubusercontent.com/n1dhiparate/minor-project-safepath/main/combined_safety_data.csv", type: "safety" },
+    { url: "https://raw.githubusercontent.com/n1dhiparate/minor-project-safepath/refs/heads/main/crime_santacruz_juhu%20(1).csv", type: "crime" },
+  ];
+
+  // ✅ Load current location
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -51,43 +54,49 @@ export default function Home() {
     })();
   }, []);
 
-  // ✅ Magnetometer (Compass Direction)
+  // ✅ Load multiple CSVs from GitHub
   useEffect(() => {
-    let subscription = Magnetometer.addListener((data) => {
-      let angle = Math.atan2(data.y, data.x) * (180 / Math.PI);
-      setHeading(angle >= 0 ? angle : angle + 360);
-    });
-    return () => subscription && subscription.remove();
+    const loadSafetyData = async () => {
+      try {
+        let allData = [];
+
+        for (const csv of csvUrls) {
+          const response = await fetch(csv.url);
+          const csvString = await response.text();
+
+          const parsed = Papa.parse(csvString, {
+            header: true,
+            skipEmptyLines: true,
+            dynamicTyping: true,
+          });
+
+          const clean = parsed.data.filter((r) => r.Latitude && r.Longitude);
+
+          const typedData = clean.map((row) => ({ ...row, _type: csv.type }));
+
+          allData = allData.concat(typedData);
+        }
+
+        setSafetyData(allData);
+        console.log("✅ Loaded all CSVs:", allData.length, "rows");
+      } catch (error) {
+        console.error("❌ Error loading CSVs:", error);
+      }
+    };
+
+    loadSafetyData();
   }, []);
 
-  const handleSearch = async (text) => {
-    setQuery(text);
-    if (text.length > 2) {
-      try {
-        const response = await fetch(
-          `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-            text
-          )}&key=${GOOGLE_MAPS_API_KEY}`
-        );
-        const json = await response.json();
-        setPredictions(json.predictions || []);
-      } catch (error) {
-        setPredictions([]);
-      }
-    } else {
-      setPredictions([]);
-    }
-  };
+  // ✅ Compass functionality
+  useEffect(() => {
+    const sub = Magnetometer.addListener((data) => {
+      const angle = Math.atan2(data.y, data.x) * (180 / Math.PI);
+      setHeading(angle >= 0 ? angle : angle + 360);
+    });
+    return () => sub && sub.remove();
+  }, []);
 
-  const openDrawer = () => {
-    setDrawerOpen(true);
-    Animated.timing(drawerAnim, {
-      toValue: 0,
-      duration: 250,
-      useNativeDriver: false,
-    }).start();
-  };
-
+  // ✅ Mic animation toggle
   const toggleMic = () => {
     if (isListening) {
       setIsListening(false);
@@ -114,36 +123,28 @@ export default function Home() {
       ).start();
     }
   };
-  // Santacruz fixed map region
-const santacruzRegion = {
-  latitude: 19.0817,
-  longitude: 72.8410,
-  latitudeDelta: 0.03,
-  longitudeDelta: 0.03,
-};
 
-// State for safety score
-const [safetyScore, setSafetyScore] = useState(null);
-
-// Function to calculate area safety score
-const calculateSafetyScore = () => {
-  let safeCount = 0, cautionCount = 0, unsafeCount = 0;
-
-  unsafeSpots.forEach((spot) => {
-    if (spot.safetyStatus === "safe") safeCount++;
-    else if (spot.safetyStatus === "caution") cautionCount++;
-    else if (spot.safetyStatus === "unsafe") unsafeCount++;
-  });
-
-  const total = safeCount + cautionCount + unsafeCount;
-  const raw = (safeCount * 2 + cautionCount * 1 - unsafeCount * 2) / total;
-  const normalized = Math.max(0, Math.min(10, ((raw + 2) / 4) * 10));
-  setSafetyScore(normalized.toFixed(1));
-};
-
+  // ✅ Handle search (Google Places API)
+  const handleSearch = async (text) => {
+    setQuery(text);
+    if (text.length > 2) {
+      try {
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
+            text
+          )}&key=${GOOGLE_MAPS_API_KEY}`
+        );
+        const json = await res.json();
+        setPredictions(json.predictions || []);
+      } catch {
+        setPredictions([]);
+      }
+    } else setPredictions([]);
+  };
 
   return (
     <View style={{ flex: 1 }}>
+      {/* 🗺 MAP VIEW */}
       <MapView
         style={{ flex: 1 }}
         region={{
@@ -153,23 +154,52 @@ const calculateSafetyScore = () => {
           longitudeDelta: 0.05,
         }}
       >
-        {/* ✅ Santacruz Unsafe Spots */}
-{unsafeSpots.map((spot, i) => (
-  <Marker
-    key={i}
-    coordinate={{ latitude: spot.lat, longitude: spot.lng }}
-    title={spot.name}
-    description={`${spot.category} • ${spot.safetyStatus}`}
-    pinColor={
-      spot.safetyStatus === "safe"
-        ? "green"
-        : spot.safetyStatus === "caution"
-        ? "yellow"
-        : "red"
-    }
-  />
-))}
+        {/* 🔴 Unsafe spots (static) */}
+        {unsafeSpots.map((spot, i) => (
+          <Marker
+            key={`unsafe-${i}`}
+            coordinate={{ latitude: spot.lat, longitude: spot.lng }}
+            title={spot.name}
+            description={`${spot.category} • ${spot.safetyStatus}`}
+            pinColor={
+              spot.safetyStatus === "safe"
+                ? "green"
+                : spot.safetyStatus === "caution"
+                ? "yellow"
+                : "red"
+            }
+          />
+        ))}
 
+        {/* 🟢/🟣 CSV Safety / Crime Markers */}
+        {safetyData.map((a, i) => {
+          let color = "blue";
+          let desc = "";
+
+          if (a._type === "safety") {
+            const score = parseFloat(a["Safety_Score_0_10"]);
+            color = score >= 7 ? "green" : score >= 4 ? "yellow" : "red";
+            desc = `Safety Score: ${score.toFixed(1)}/10`;
+          } else if (a._type === "crime") {
+            color = colors.crimeMarker;
+            desc = "Crime Data Location";
+          }
+
+          return (
+            <Marker
+              key={`marker-${i}`}
+              coordinate={{
+                latitude: parseFloat(a.Latitude),
+                longitude: parseFloat(a.Longitude),
+              }}
+              title={a["Area"] || a["Location"] || "Unknown Area"}
+              description={desc}
+              pinColor={color}
+            />
+          );
+        })}
+
+        {/* 📍 Current Location */}
         {location && (
           <Marker
             coordinate={{
@@ -181,29 +211,8 @@ const calculateSafetyScore = () => {
         )}
       </MapView>
 
-{/* ✅ Santacruz Unsafe Spots */}
-{unsafeSpots.map((spot, i) => (
-  <Marker
-    key={i}
-    coordinate={{ latitude: spot.lat, longitude: spot.lng }}
-    title={spot.name}
-    description={`${spot.category} • ${spot.safetyStatus}`}
-    pinColor={
-      spot.safetyStatus === "safe"
-        ? "green"
-        : spot.safetyStatus === "caution"
-        ? "yellow"
-        : "red"
-    }
-  />
-))}
-
-      {/* SEARCH BAR */}
+      {/* 🔎 Search bar */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={openDrawer}>
-          <Feather name="menu" size={26} color={colors.text} />
-        </TouchableOpacity>
-
         <View style={styles.searchContainer}>
           <TextInput
             value={query}
@@ -224,14 +233,14 @@ const calculateSafetyScore = () => {
         </View>
       </View>
 
-      {/* ✅ COMPASS NEEDLE */}
+      {/* 🧭 Compass */}
       <View style={styles.compassContainer}>
         <Animated.View style={{ transform: [{ rotate: `${heading}deg` }] }}>
           <Feather name="navigation" size={28} color={colors.text} />
         </Animated.View>
       </View>
 
-      {/* ✅ FLOATING EXPAND MENU */}
+      {/* ⚙️ Floating action buttons */}
       <>
         <TouchableOpacity
           onPress={() => setMenuOpen(!menuOpen)}
@@ -245,15 +254,12 @@ const calculateSafetyScore = () => {
             <TouchableOpacity style={[styles.smallButton, { right: 95, bottom: 35 }]}>
               <Feather name="map" size={20} color="#fff" />
             </TouchableOpacity>
-
             <TouchableOpacity style={[styles.smallButton, { right: 75, bottom: 95 }]}>
               <Feather name="shield" size={20} color="#fff" />
             </TouchableOpacity>
-
             <TouchableOpacity style={[styles.smallButton, { right: 15, bottom: 95 }]}>
               <Feather name="alert-triangle" size={20} color="#fff" />
             </TouchableOpacity>
-
             <TouchableOpacity style={[styles.smallButton, { right: -45, bottom: 35 }]}>
               <Feather name="phone-call" size={20} color="#fff" />
             </TouchableOpacity>
@@ -261,6 +267,7 @@ const calculateSafetyScore = () => {
         )}
       </>
 
+      {/* 🧾 Prediction dropdown */}
       {predictions?.length > 0 && (
         <FlatList
           style={styles.predictionList}
@@ -273,6 +280,27 @@ const calculateSafetyScore = () => {
           )}
         />
       )}
+
+      {/* 🗺 Legend */}
+      <View style={styles.legendContainer}>
+        <Text style={styles.legendTitle}>Legend:</Text>
+        <View style={styles.legendRow}>
+          <View style={[styles.legendColor, { backgroundColor: "green" }]} />
+          <Text>Safe (Safety CSV)</Text>
+        </View>
+        <View style={styles.legendRow}>
+          <View style={[styles.legendColor, { backgroundColor: "yellow" }]} />
+          <Text>Moderate (Safety CSV)</Text>
+        </View>
+        <View style={styles.legendRow}>
+          <View style={[styles.legendColor, { backgroundColor: "red" }]} />
+          <Text>Unsafe (Safety CSV)</Text>
+        </View>
+        <View style={styles.legendRow}>
+          <View style={[styles.legendColor, { backgroundColor: colors.crimeMarker }]} />
+          <Text>Crime Data</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -317,8 +345,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
   },
-
-  /* ✅ COMPASS STYLE */
   compassContainer: {
     position: "absolute",
     bottom: 35,
@@ -327,10 +353,7 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 40,
     elevation: 8,
-    justifyContent: "center",
-    alignItems: "center",
   },
-
   quickNavButton: {
     position: "absolute",
     bottom: 35,
@@ -352,5 +375,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     elevation: 8,
+  },
+  legendContainer: {
+    position: "absolute",
+    bottom: 10,
+    left: 10,
+    backgroundColor: colors.background,
+    padding: 10,
+    borderRadius: 10,
+    elevation: 8,
+  },
+  legendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+    gap: 5,
+  },
+  legendColor: {
+    width: 15,
+    height: 15,
+    borderRadius: 4,
+  },
+  legendTitle: {
+    fontWeight: "bold",
+    marginBottom: 5,
   },
 });
