@@ -1,17 +1,22 @@
-module.exports = function(api) {
+module.exports = function (api) {
   api.cache(true);
   return {
-    presets: ['babel-preset-expo'],
+    presets: ["babel-preset-expo"],
     plugins: [
-      ["module:react-native-dotenv", {
-        "moduleName": "@env",
-        "path": ".env",
-        "safe": false,
-        "allowUndefined": true
-      }],
-      '@babel/plugin-proposal-optional-chaining',
-      '@babel/plugin-proposal-nullish-coalescing-operator',
-      '@babel/plugin-transform-template-literals', // ✅ add this line
+      "@babel/plugin-transform-template-literals",
+      "@babel/plugin-transform-optional-chaining",
+      "@babel/plugin-transform-nullish-coalescing-operator",
+      [
+        "module:react-native-dotenv",
+        {
+          moduleName: "@env",
+          path: ".env",
+          blocklist: null,
+          allowlist: null,
+          safe: false,
+          allowUndefined: true,
+        },
+      ],
     ],
   };
 };
