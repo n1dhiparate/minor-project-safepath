@@ -36,12 +36,19 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [heading, setHeading] = useState(0);
   const [safetyData, setSafetyData] = useState([]);
+  const [filterType, setFilterType] = useState("none"); // ✅ added
 
   const micAnim = useRef(new Animated.Value(1)).current;
 
   const csvUrls = [
-    { url: "https://raw.githubusercontent.com/n1dhiparate/minor-project-safepath/main/combined_safety_data.csv", type: "safety" },
-    { url: "https://raw.githubusercontent.com/n1dhiparate/minor-project-safepath/refs/heads/main/crime_santacruz_juhu%20(1).csv", type: "crime" },
+    {
+      url: "https://raw.githubusercontent.com/n1dhiparate/minor-project-safepath/main/combined_safety_data.csv",
+      type: "safety",
+    },
+    {
+      url: "https://raw.githubusercontent.com/n1dhiparate/minor-project-safepath/refs/heads/main/crime_santacruz_juhu%20(1).csv",
+      type: "crime",
+    },
   ];
 
   // ✅ Load current location
@@ -155,21 +162,28 @@ export default function Home() {
         }}
       >
         {/* 🔴 Unsafe spots (static) */}
-        {unsafeSpots.map((spot, i) => (
-          <Marker
-            key={`unsafe-${i}`}
-            coordinate={{ latitude: spot.lat, longitude: spot.lng }}
-            title={spot.name}
-            description={`${spot.category} • ${spot.safetyStatus}`}
-            pinColor={
-              spot.safetyStatus === "safe"
-                ? "green"
-                : spot.safetyStatus === "caution"
-                ? "yellow"
-                : "red"
-            }
-          />
-        ))}
+        {unsafeSpots
+          .filter((spot) => {
+            if (filterType === "none") return false;
+            if (filterType === "safe") return spot.safetyStatus === "safe";
+            if (filterType === "unsafe") return spot.safetyStatus !== "safe";
+            return true; // both
+          })
+          .map((spot, i) => (
+            <Marker
+              key={`unsafe-${i}`}
+              coordinate={{ latitude: spot.lat, longitude: spot.lng }}
+              title={spot.name}
+              description={`${spot.category} • ${spot.safetyStatus}`}
+              pinColor={
+                spot.safetyStatus === "safe"
+                  ? "green"
+                  : spot.safetyStatus === "caution"
+                  ? "yellow"
+                  : "red"
+              }
+            />
+          ))}
 
         {/* 🟢/🟣 CSV Safety / Crime Markers */}
         {safetyData.map((a, i) => {
@@ -297,8 +311,38 @@ export default function Home() {
           <Text>Unsafe (Safety CSV)</Text>
         </View>
         <View style={styles.legendRow}>
-          <View style={[styles.legendColor, { backgroundColor: colors.crimeMarker }]} />
+          <View
+            style={[styles.legendColor, { backgroundColor: colors.crimeMarker }]}
+          />
           <Text>Crime Data</Text>
+        </View>
+
+        {/* ✅ Filter buttons inside legend */}
+        <View style={styles.filterToggleContainer}>
+          {[
+            { label: "🚫 None", value: "none" },
+            { label: "🟢 Safe", value: "safe" },
+            { label: "🔴 Unsafe", value: "unsafe" },
+            { label: "⚪ Both", value: "both" },
+          ].map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              style={[
+                styles.filterButton,
+                filterType === opt.value && styles.filterButtonActive,
+              ]}
+              onPress={() => setFilterType(opt.value)}
+            >
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  filterType === opt.value && styles.filterButtonTextActive,
+                ]}
+              >
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
     </View>
@@ -399,5 +443,30 @@ const styles = StyleSheet.create({
   legendTitle: {
     fontWeight: "bold",
     marginBottom: 5,
+  },
+  filterToggleContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    marginTop: 8,
+    gap: 6,
+  },
+  filterButton: {
+    backgroundColor: "#eee",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 15,
+    elevation: 2,
+  },
+  filterButtonActive: {
+    backgroundColor: colors.buttons,
+  },
+  filterButtonText: {
+    fontSize: 12,
+    color: colors.text,
+  },
+  filterButtonTextActive: {
+    color: "#fff",
+    fontWeight: "bold",
   },
 });
