@@ -9,7 +9,7 @@ import {
   Dimensions,
   StyleSheet,
 } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, Polyline } from "react-native-maps";
 import * as Location from "expo-location";
 import { Magnetometer } from "expo-sensors";
 import { Feather, MaterialIcons } from "@expo/vector-icons";
@@ -40,6 +40,10 @@ export default function Home() {
   const [filterType, setFilterType] = useState("none");
   const [showFilters, setShowFilters] = useState(false);
 
+  // new routing states (added)
+  const [destination, setDestination] = useState(null);
+  const [routeCoords, setRouteCoords] = useState([]);
+
   const micAnim = useRef(new Animated.Value(1)).current;
   const drawerAnim = useRef(new Animated.Value(-width * 0.7)).current;
 
@@ -57,10 +61,14 @@ export default function Home() {
   // 📍 Get current location
   useEffect(() => {
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
-      let loc = await Location.getCurrentPositionAsync({});
-      setLocation(loc.coords);
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") return;
+        let loc = await Location.getCurrentPositionAsync({});
+        setLocation(loc.coords);
+      } catch (err) {
+        console.error("Error getting location:", err);
+      }
     })();
   }, []);
 
@@ -138,10 +146,140 @@ export default function Home() {
         );
         const json = await res.json();
         setPredictions(json.predictions || []);
-      } catch {
+      } catch (err) {
+        console.warn("Autocomplete failed:", err);
         setPredictions([]);
       }
     } else setPredictions([]);
+  };
+
+  // -------------------------
+  // Safety-based routing
+  // -------------------------
+  const generateSafeRoute = async (destPlaceId) => {
+    try {
+      if (!location) {
+        console.warn("Current location unknown. Cannot generate route.");
+        return;
+      }
+
+      // 1) Place details to get destination coords
+      const placeRes = await fetch(
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${destPlaceId}&key=${GOOGLE_MAPS_API_KEY}`
+      );
+      const placeJson = await placeRes.json();
+      const destLoc = placeJson?.result?.geometry?.location;
+      if (!destLoc) {
+        console.warn("Place details not found for:", destPlaceId);
+        return;
+      }
+      setDestination({ latitude: destLoc.lat, longitude: destLoc.lng });
+
+      // 2) Directions with alternatives
+      const dirRes = await fetch(
+        `https://maps.googleapis.com/maps/api/directions/json?origin=${location.latitude},${location.longitude}&destination=${destLoc.lat},${destLoc.lng}&alternatives=true&mode=walking&key=${GOOGLE_MAPS_API_KEY}`
+      );
+      const dirJson = await dirRes.json();
+      if (!dirJson.routes || dirJson.routes.length === 0) {
+        console.warn("No routes from Directions API");
+        return;
+      }
+
+      // 3) Score routes by safety & pick best
+      const scored = dirJson.routes.map((route) => {
+        const points = decodePolyline(route.overview_polyline?.points || "");
+        const penalty = calculateSafetyPenalty(points); // larger = worse
+        const distanceMeters = route.legs?.[0]?.distance?.value || 0;
+        const durationSec = route.legs?.[0]?.duration?.value || 0;
+
+        const distanceKm = distanceMeters / 1000;
+        // Score: prefer shorter routes and lower penalty. Tweak weights if needed.
+        const score = -distanceKm - penalty * 0.6 + 1 / Math.max(1, durationSec / 60);
+        return { points, score, penalty, distanceKm };
+      });
+
+      scored.sort((a, b) => b.score - a.score);
+      const best = scored[0];
+      if (best) {
+        setRouteCoords(best.points);
+      } else {
+        setRouteCoords([]);
+      }
+    } catch (err) {
+      console.error("Error generating safe route:", err);
+    }
+  };
+
+  // Penalize route points near unsafe/crime spots
+  const calculateSafetyPenalty = (points) => {
+    if (!safetyData || safetyData.length === 0 || !points || points.length === 0) return 0;
+    let penalty = 0;
+    for (const p of points) {
+      for (const spot of safetyData) {
+        const lat = parseFloat(spot.Latitude);
+        const lng = parseFloat(spot.Longitude);
+        if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
+        const dKm = getDistance(p, { latitude: lat, longitude: lng });
+        if (dKm < 0.15) {
+          if (spot._type === "crime") {
+            penalty += 10;
+          } else {
+            const score = parseFloat(spot["Safety_Score_0_10"] ?? 5);
+            penalty += Math.max(0, 10 - score) * 0.8;
+          }
+        }
+      }
+    }
+    return penalty / Math.max(1, points.length);
+  };
+
+  // Haversine distance (km)
+  const getDistance = (a, b) => {
+    const toRad = (x) => (x * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(b.latitude - a.latitude);
+    const dLon = toRad(b.longitude - a.longitude);
+    const lat1 = toRad(a.latitude);
+    const lat2 = toRad(b.latitude);
+    const val =
+      Math.sin(dLat / 2) ** 2 +
+      Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+    return R * 2 * Math.atan2(Math.sqrt(val), Math.sqrt(1 - val));
+  };
+
+  // Decode Google polyline
+  const decodePolyline = (encoded) => {
+    if (!encoded) return [];
+    let points = [];
+    let index = 0,
+      lat = 0,
+      lng = 0;
+
+    while (index < encoded.length) {
+      let b,
+        shift = 0,
+        result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlat = result & 1 ? ~(result >> 1) : result >> 1;
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlng = result & 1 ? ~(result >> 1) : result >> 1;
+      lng += dlng;
+
+      points.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+    }
+    return points;
   };
 
   // 🧾 Drawer Animation
@@ -204,7 +342,7 @@ export default function Home() {
           if (a._type === "safety") {
             const score = parseFloat(a["Safety_Score_0_10"]);
             color = score >= 7 ? "green" : score >= 4 ? "yellow" : "red";
-            desc = `Safety Score: ${score.toFixed(1)}/10`;
+            desc = `Safety Score: ${score.toFixed ? score.toFixed(1) : score}/10`;
           } else if (a._type === "crime") {
             color = colors.crimeMarker;
             desc = "Crime Data Location";
@@ -232,6 +370,14 @@ export default function Home() {
             title="You are here"
           />
         )}
+
+        {/* route polyline */}
+        {routeCoords && routeCoords.length > 0 && (
+          <Polyline coordinates={routeCoords} strokeColor="#007AFF" strokeWidth={5} />
+        )}
+
+        {/* destination marker */}
+        {destination && <Marker coordinate={destination} title="Destination" pinColor="#2E8B57" />}
       </MapView>
 
       {/* 🔍 Top bar: menu + search + mic */}
@@ -249,15 +395,51 @@ export default function Home() {
           />
           <TouchableOpacity onPress={toggleMic}>
             <Animated.View style={{ transform: [{ scale: micAnim }] }}>
-              <MaterialIcons
-                name="mic"
-                size={22}
-                color={isListening ? "#d32f2f" : "#555"}
-              />
+              <MaterialIcons name="mic" size={22} color={isListening ? "#d32f2f" : "#555"} />
             </Animated.View>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Autocomplete predictions list (appears under top bar) */}
+      {predictions && predictions.length > 0 && (
+        <View
+          style={{
+            position: "absolute",
+            top: 110,
+            left: 15,
+            right: 15,
+            backgroundColor: colors.background,
+            borderRadius: 8,
+            elevation: 6,
+            maxHeight: 250,
+            paddingVertical: 6,
+            zIndex: 50,
+          }}
+        >
+          <FlatList
+            data={predictions}
+            keyExtractor={(item) => item.place_id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                onPress={() => {
+                  setQuery(item.description);
+                  setPredictions([]);
+                  generateSafeRoute(item.place_id);
+                }}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  borderBottomWidth: 1,
+                  borderBottomColor: "#eee",
+                }}
+              >
+                <Text>{item.description}</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
 
       {/* 🧭 Compass */}
       <View style={styles.compassContainer}>
@@ -268,10 +450,7 @@ export default function Home() {
 
       {/* 🟣 Floating Action Button (Added Here) */}
       <>
-        <TouchableOpacity
-          onPress={() => setMenuOpen(!menuOpen)}
-          style={styles.quickNavButton}
-        >
+        <TouchableOpacity onPress={() => setMenuOpen(!menuOpen)} style={styles.quickNavButton}>
           <Feather name={menuOpen ? "x" : "plus"} size={26} color="#fff" />
         </TouchableOpacity>
 
@@ -286,7 +465,6 @@ export default function Home() {
             <TouchableOpacity style={[styles.smallButton, { right: 15, bottom: 95 }]}>
               <Feather name="alert-triangle" size={20} color="#fff" />
             </TouchableOpacity>
-            
           </>
         )}
       </>
@@ -311,9 +489,7 @@ export default function Home() {
             style={styles.mainFilterButton}
             onPress={() => setShowFilters(!showFilters)}
           >
-            <Text style={styles.mainFilterButtonText}>
-              🔍 Filter: {filterType.toUpperCase()}
-            </Text>
+            <Text style={styles.mainFilterButtonText}>🔍 Filter: {filterType.toUpperCase()}</Text>
           </TouchableOpacity>
 
           {showFilters && (
@@ -326,20 +502,14 @@ export default function Home() {
               ].map((opt) => (
                 <TouchableOpacity
                   key={opt.value}
-                  style={[
-                    styles.filterButton,
-                    filterType === opt.value && styles.filterButtonActive,
-                  ]}
+                  style={[styles.filterButton, filterType === opt.value && styles.filterButtonActive]}
                   onPress={() => {
                     setFilterType(opt.value);
                     setShowFilters(false);
                   }}
                 >
                   <Text
-                    style={[
-                      styles.filterButtonText,
-                      filterType === opt.value && styles.filterButtonTextActive,
-                    ]}
+                    style={[styles.filterButtonText, filterType === opt.value && styles.filterButtonTextActive]}
                   >
                     {opt.label}
                   </Text>
