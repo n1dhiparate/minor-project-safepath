@@ -25,20 +25,23 @@ const colors = {
   background: "#FFF9F0",
   buttons: "#9BB8AD",
   text: "#444444",
-  crimeMarker: "#800080", // purple for crime CSV
+  crimeMarker: "#800080",
 };
 
 export default function Home() {
   const [location, setLocation] = useState(null);
   const [query, setQuery] = useState("");
   const [predictions, setPredictions] = useState([]);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [heading, setHeading] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [safetyData, setSafetyData] = useState([]);
-  const [filterType, setFilterType] = useState("none"); // ✅ added
+  const [filterType, setFilterType] = useState("none");
+  const [showFilters, setShowFilters] = useState(false);
 
   const micAnim = useRef(new Animated.Value(1)).current;
+  const drawerAnim = useRef(new Animated.Value(-width * 0.7)).current;
 
   const csvUrls = [
     {
@@ -51,7 +54,7 @@ export default function Home() {
     },
   ];
 
-  // ✅ Load current location
+  // 📍 Get current location
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -61,40 +64,7 @@ export default function Home() {
     })();
   }, []);
 
-  // ✅ Load multiple CSVs from GitHub
-  useEffect(() => {
-    const loadSafetyData = async () => {
-      try {
-        let allData = [];
-
-        for (const csv of csvUrls) {
-          const response = await fetch(csv.url);
-          const csvString = await response.text();
-
-          const parsed = Papa.parse(csvString, {
-            header: true,
-            skipEmptyLines: true,
-            dynamicTyping: true,
-          });
-
-          const clean = parsed.data.filter((r) => r.Latitude && r.Longitude);
-
-          const typedData = clean.map((row) => ({ ...row, _type: csv.type }));
-
-          allData = allData.concat(typedData);
-        }
-
-        setSafetyData(allData);
-        console.log("✅ Loaded all CSVs:", allData.length, "rows");
-      } catch (error) {
-        console.error("❌ Error loading CSVs:", error);
-      }
-    };
-
-    loadSafetyData();
-  }, []);
-
-  // ✅ Compass functionality
+  // 🧭 Compass
   useEffect(() => {
     const sub = Magnetometer.addListener((data) => {
       const angle = Math.atan2(data.y, data.x) * (180 / Math.PI);
@@ -103,7 +73,32 @@ export default function Home() {
     return () => sub && sub.remove();
   }, []);
 
-  // ✅ Mic animation toggle
+  // 📊 Load CSV data
+  useEffect(() => {
+    const loadSafetyData = async () => {
+      try {
+        let allData = [];
+        for (const csv of csvUrls) {
+          const response = await fetch(csv.url);
+          const csvString = await response.text();
+          const parsed = Papa.parse(csvString, {
+            header: true,
+            skipEmptyLines: true,
+            dynamicTyping: true,
+          });
+          const clean = parsed.data.filter((r) => r.Latitude && r.Longitude);
+          const typedData = clean.map((row) => ({ ...row, _type: csv.type }));
+          allData = allData.concat(typedData);
+        }
+        setSafetyData(allData);
+      } catch (error) {
+        console.error("❌ Error loading CSVs:", error);
+      }
+    };
+    loadSafetyData();
+  }, []);
+
+  // 🎤 Mic Animation
   const toggleMic = () => {
     if (isListening) {
       setIsListening(false);
@@ -131,7 +126,7 @@ export default function Home() {
     }
   };
 
-  // ✅ Handle search (Google Places API)
+  // 🔍 Search Places
   const handleSearch = async (text) => {
     setQuery(text);
     if (text.length > 2) {
@@ -149,6 +144,23 @@ export default function Home() {
     } else setPredictions([]);
   };
 
+  // 🧾 Drawer Animation
+  const openDrawer = () => {
+    setDrawerOpen(true);
+    Animated.timing(drawerAnim, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: false,
+    }).start();
+  };
+  const closeDrawer = () => {
+    Animated.timing(drawerAnim, {
+      toValue: -width * 0.7,
+      duration: 250,
+      useNativeDriver: false,
+    }).start(() => setDrawerOpen(false));
+  };
+
   return (
     <View style={{ flex: 1 }}>
       {/* 🗺 MAP VIEW */}
@@ -161,17 +173,17 @@ export default function Home() {
           longitudeDelta: 0.05,
         }}
       >
-        {/* 🔴 Unsafe spots (static) */}
+        {/* 🔴 Unsafe Spots */}
         {unsafeSpots
           .filter((spot) => {
             if (filterType === "none") return false;
             if (filterType === "safe") return spot.safetyStatus === "safe";
             if (filterType === "unsafe") return spot.safetyStatus !== "safe";
-            return true; // both
+            return true;
           })
           .map((spot, i) => (
             <Marker
-              key={`unsafe-${i}`}
+              key={`spot-${i}`}
               coordinate={{ latitude: spot.lat, longitude: spot.lng }}
               title={spot.name}
               description={`${spot.category} • ${spot.safetyStatus}`}
@@ -185,11 +197,10 @@ export default function Home() {
             />
           ))}
 
-        {/* 🟢/🟣 CSV Safety / Crime Markers */}
+        {/* 🟢 / 🟣 CSV markers */}
         {safetyData.map((a, i) => {
           let color = "blue";
           let desc = "";
-
           if (a._type === "safety") {
             const score = parseFloat(a["Safety_Score_0_10"]);
             color = score >= 7 ? "green" : score >= 4 ? "yellow" : "red";
@@ -198,7 +209,6 @@ export default function Home() {
             color = colors.crimeMarker;
             desc = "Crime Data Location";
           }
-
           return (
             <Marker
               key={`marker-${i}`}
@@ -213,7 +223,6 @@ export default function Home() {
           );
         })}
 
-        {/* 📍 Current Location */}
         {location && (
           <Marker
             coordinate={{
@@ -225,14 +234,17 @@ export default function Home() {
         )}
       </MapView>
 
-      {/* 🔎 Search bar */}
+      {/* 🔍 Top bar: menu + search + mic */}
       <View style={styles.topBar}>
+        <TouchableOpacity style={styles.menuButton} onPress={openDrawer}>
+          <Feather name="menu" size={20} color={colors.text} />
+        </TouchableOpacity>
+
         <View style={styles.searchContainer}>
           <TextInput
             value={query}
             onChangeText={handleSearch}
             placeholder="Search location..."
-            placeholderTextColor="#666"
             style={styles.searchInput}
           />
           <TouchableOpacity onPress={toggleMic}>
@@ -240,7 +252,7 @@ export default function Home() {
               <MaterialIcons
                 name="mic"
                 size={22}
-                color={isListening ? "#d32f2f" : colors.text}
+                color={isListening ? "#d32f2f" : "#555"}
               />
             </Animated.View>
           </TouchableOpacity>
@@ -250,101 +262,124 @@ export default function Home() {
       {/* 🧭 Compass */}
       <View style={styles.compassContainer}>
         <Animated.View style={{ transform: [{ rotate: `${heading}deg` }] }}>
-          <Feather name="navigation" size={28} color={colors.text} />
+          <Feather name="navigation" size={24} color={colors.text} />
         </Animated.View>
       </View>
 
-      {/* ⚙️ Floating action buttons */}
+      {/* 🟣 Floating Action Button (Added Here) */}
       <>
         <TouchableOpacity
           onPress={() => setMenuOpen(!menuOpen)}
           style={styles.quickNavButton}
         >
-          <Feather name={menuOpen ? "x" : "navigation"} size={26} color="#fff" />
+          <Feather name={menuOpen ? "x" : "plus"} size={26} color="#fff" />
         </TouchableOpacity>
 
         {menuOpen && (
           <>
-            <TouchableOpacity style={[styles.smallButton, { right: 95, bottom: 35 }]}>
+            <TouchableOpacity style={[styles.smallButton, { right: 90, bottom: 30 }]}>
               <Feather name="map" size={20} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.smallButton, { right: 75, bottom: 95 }]}>
+            <TouchableOpacity style={[styles.smallButton, { right: 70, bottom: 85 }]}>
               <Feather name="shield" size={20} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity style={[styles.smallButton, { right: 15, bottom: 95 }]}>
               <Feather name="alert-triangle" size={20} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.smallButton, { right: -45, bottom: 35 }]}>
-              <Feather name="phone-call" size={20} color="#fff" />
-            </TouchableOpacity>
+            
           </>
         )}
       </>
 
-      {/* 🧾 Prediction dropdown */}
-      {predictions?.length > 0 && (
-        <FlatList
-          style={styles.predictionList}
-          data={predictions}
-          keyExtractor={(item) => item.place_id}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.predictionItem}>
-              <Text>{item.description}</Text>
-            </TouchableOpacity>
-          )}
-        />
-      )}
-
-      {/* 🗺 Legend */}
+      {/* 🧾 Legend + Filter */}
       <View style={styles.legendContainer}>
         <Text style={styles.legendTitle}>Legend:</Text>
-        <View style={styles.legendRow}>
-          <View style={[styles.legendColor, { backgroundColor: "green" }]} />
-          <Text>Safe (Safety CSV)</Text>
-        </View>
-        <View style={styles.legendRow}>
-          <View style={[styles.legendColor, { backgroundColor: "yellow" }]} />
-          <Text>Moderate (Safety CSV)</Text>
-        </View>
-        <View style={styles.legendRow}>
-          <View style={[styles.legendColor, { backgroundColor: "red" }]} />
-          <Text>Unsafe (Safety CSV)</Text>
-        </View>
-        <View style={styles.legendRow}>
-          <View
-            style={[styles.legendColor, { backgroundColor: colors.crimeMarker }]}
-          />
-          <Text>Crime Data</Text>
-        </View>
+        {[
+          ["green", "Safe (Safety CSV)"],
+          ["yellow", "Moderate (Safety CSV)"],
+          ["red", "Unsafe (Safety CSV)"],
+          [colors.crimeMarker, "Crime Data"],
+        ].map(([clr, lbl]) => (
+          <View key={lbl} style={styles.legendRow}>
+            <View style={[styles.legendColor, { backgroundColor: clr }]} />
+            <Text>{lbl}</Text>
+          </View>
+        ))}
 
-        {/* ✅ Filter buttons inside legend */}
         <View style={styles.filterToggleContainer}>
-          {[
-            { label: "🚫 None", value: "none" },
-            { label: "🟢 Safe", value: "safe" },
-            { label: "🔴 Unsafe", value: "unsafe" },
-            { label: "⚪ Both", value: "both" },
-          ].map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              style={[
-                styles.filterButton,
-                filterType === opt.value && styles.filterButtonActive,
-              ]}
-              onPress={() => setFilterType(opt.value)}
-            >
-              <Text
-                style={[
-                  styles.filterButtonText,
-                  filterType === opt.value && styles.filterButtonTextActive,
-                ]}
-              >
-                {opt.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          <TouchableOpacity
+            style={styles.mainFilterButton}
+            onPress={() => setShowFilters(!showFilters)}
+          >
+            <Text style={styles.mainFilterButtonText}>
+              🔍 Filter: {filterType.toUpperCase()}
+            </Text>
+          </TouchableOpacity>
+
+          {showFilters && (
+            <View style={styles.filterOptionsContainer}>
+              {[
+                { label: "🚫 None", value: "none" },
+                { label: "🟢 Safe", value: "safe" },
+                { label: "🔴 Unsafe", value: "unsafe" },
+                { label: "⚪ Both", value: "both" },
+              ].map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    styles.filterButton,
+                    filterType === opt.value && styles.filterButtonActive,
+                  ]}
+                  onPress={() => {
+                    setFilterType(opt.value);
+                    setShowFilters(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.filterButtonText,
+                      filterType === opt.value && styles.filterButtonTextActive,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       </View>
+
+      {/* 👤 Drawer */}
+      {drawerOpen && (
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPressOut={closeDrawer}>
+          <Animated.View style={[styles.drawerContainer, { left: drawerAnim }]}>
+            <View style={styles.profileHeader}>
+              <MaterialIcons name="account-circle" size={60} color="#4a4a4a" />
+              <Text style={styles.accName}>Manva Kulkarni</Text>
+            </View>
+
+            <View style={styles.optionSection}>
+              {[
+                ["settings", "Settings"],
+                ["bell", "Emergency Options"],
+                ["map-pin", "Saved Locations"],
+                ["user", "Profile Settings"],
+              ].map(([icon, label]) => (
+                <TouchableOpacity key={label} style={styles.optionItem}>
+                  <Feather name={icon} size={20} color="#333" />
+                  <Text style={styles.optionText}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.footerSection}>
+              <Text style={styles.footerText}>App version 1.0.0</Text>
+              <Text style={styles.footerText}>Developed by Team SafePath</Text>
+            </View>
+          </Animated.View>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -357,42 +392,30 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-start",
     paddingHorizontal: 15,
     gap: 10,
+  },
+  menuButton: {
+    backgroundColor: colors.background,
+    padding: 10,
+    borderRadius: 10,
+    elevation: 3,
   },
   searchContainer: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.background,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    elevation: 4,
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 8,
-    color: colors.text,
-  },
-  predictionList: {
-    position: "absolute",
-    top: 100,
-    width: "90%",
-    alignSelf: "center",
-    backgroundColor: colors.background,
     borderRadius: 10,
-    elevation: 3,
-    maxHeight: 200,
+    paddingHorizontal: 10,
+    elevation: 2,
   },
-  predictionItem: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
+  searchInput: { flex: 1, paddingVertical: 11 },
   compassContainer: {
     position: "absolute",
-    bottom: 35,
-    left: 25,
+    top: 115,
+    right: 15,
     backgroundColor: colors.background,
     padding: 10,
     borderRadius: 40,
@@ -429,44 +452,54 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     elevation: 8,
   },
-  legendRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 4,
-    gap: 5,
+  legendRow: { flexDirection: "row", alignItems: "center", marginBottom: 4, gap: 5 },
+  legendColor: { width: 15, height: 15, borderRadius: 4 },
+  legendTitle: { fontWeight: "bold", marginBottom: 5 },
+  mainFilterButton: {
+    backgroundColor: "#007AFF",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
-  legendColor: {
-    width: 15,
-    height: 15,
-    borderRadius: 4,
-  },
-  legendTitle: {
-    fontWeight: "bold",
-    marginBottom: 5,
-  },
-  filterToggleContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
+  mainFilterButtonText: { color: "#fff", fontWeight: "600", fontSize: 14 },
+  filterOptionsContainer: {
     marginTop: 8,
-    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 8,
+    padding: 8,
+    width: "80%",
   },
-  filterButton: {
-    backgroundColor: "#eee",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 15,
-    elevation: 2,
+  filterButton: { paddingVertical: 8, borderRadius: 6, alignItems: "center" },
+  filterButtonActive: { backgroundColor: colors.buttons },
+  filterButtonText: { color: "#fff", fontSize: 15 },
+  filterButtonTextActive: { fontWeight: "bold" },
+  overlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.3)",
   },
-  filterButtonActive: {
-    backgroundColor: colors.buttons,
+  drawerContainer: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: width * 0.7,
+    backgroundColor: colors.background,
+    padding: 15,
+    elevation: 8,
   },
-  filterButtonText: {
-    fontSize: 12,
-    color: colors.text,
+  profileHeader: { alignItems: "center", marginTop: 60, marginBottom: 15 },
+  accName: { fontSize: 16, fontWeight: "bold", marginTop: 5 },
+  optionSection: { borderTopWidth: 1, borderTopColor: "#ddd", paddingTop: 10 },
+  optionItem: { flexDirection: "row", alignItems: "center", paddingVertical: 12, gap: 10 },
+  optionText: { fontSize: 15, color: "#333" },
+  footerSection: {
+    marginTop: 40,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+    paddingTop: 10,
   },
-  filterButtonTextActive: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
+  footerText: { fontSize: 12, color: "#888", textAlign: "center" },
 });
