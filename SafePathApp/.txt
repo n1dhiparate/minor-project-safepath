@@ -18,9 +18,6 @@ import { Feather, MaterialIcons } from "@expo/vector-icons";
 import { GOOGLE_MAPS_API_KEY } from "@env";
 import { unsafeSpots } from "../assets/data/unsafeSpots";
 import Papa from "papaparse";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-
 import { db } from "../firebaseConfig";
 import { collection, addDoc, onSnapshot } from "firebase/firestore";
 
@@ -37,17 +34,6 @@ const colors = {
 };
 
 export default function Home() {
-  
-  // ✅ Safe: hook is inside the function component
-  const [isNightMode, setIsNightMode] = useState(false);
-
-  const toggleisNightMode = () => {
-    setIsNightMode((prevMode) => !prevMode);
-    // Save preference to local storage or AsyncStorage if needed
-    AsyncStorage.setItem("isNightMode", JSON.stringify(!isNightMode));
-
-  };
-
   const [location, setLocation] = useState(null);
   const [query, setQuery] = useState("");
   const [predictions, setPredictions] = useState([]);
@@ -71,13 +57,6 @@ export default function Home() {
 
   const micAnim = useRef(new Animated.Value(1)).current;
   const drawerAnim = useRef(new Animated.Value(-width * 0.7)).current;
-  const [routeColor, setRouteColor] = useState("#007AFF"); // default blue
-const determineRouteColor = (penalty) => {
-  if (penalty < 3) return "green";       // very safe
-  else if (penalty < 7) return "yellow"; // moderate
-  else return "red";                      // unsafe
-};
-
 
   const csvUrls = [
     {
@@ -90,7 +69,13 @@ const determineRouteColor = (penalty) => {
     },
   ];
 
- 
+  useEffect(() => {
+  const unsub = onSnapshot(collection(db, "reports"), (snapshot) => {
+    const newReports = snapshot.docs.map((doc) => doc.data());
+    setReports(newReports);
+  });
+  return () => unsub(); // cleanup listener
+}, []);
 
   // 📍 Get current location
   useEffect(() => {
@@ -240,167 +225,144 @@ const checkLocationPermission = async () => {
 
   // 🧩 Report Submit Handler
   const handleReportSubmit = async () => {
-  try {
-    // ✅ Step 1: Get and check location permissions
-    const coords = await checkLocationPermission();
-    if (!coords) {
-      Alert.alert("Location Error", "Unable to get your current location.");
+    if (!incidentType || !incidentDesc) {
+      Alert.alert("Incomplete", "Please fill in all fields before submitting.");
       return;
     }
 
-    // ✅ Step 2: Simple duplicate report check (within 100 meters)
+    if (!location) {
+      Alert.alert("Location Unavailable", "Can't record incident location.");
+      return;
+    }
+
+    // Prepare payload - save coords as { lat, lng } to keep Firestore lightweight & consistent
+    const payload = {
+      type: incidentType,
+      desc: incidentDesc,
+      coords: { lat: location.latitude, lng: location.longitude },
+      timestamp: new Date().toISOString(),
+    };
+
+    // Simple duplicate check against in-memory reports (within 100 meters and same type)
     const isDuplicate = reports.some((r) => {
-      const rc = r.coords.latitude !== undefined
-        ? r.coords
-        : { latitude: r.coords.lat, longitude: r.coords.lng };
-      const dKm = getDistance(rc, { latitude: coords.latitude, longitude: coords.longitude });
+      if (!r.coords) return false;
+      // r.coords might be normalized to { latitude, longitude } or { lat, lng }
+      const rc = r.coords.latitude !== undefined ? r.coords : { latitude: r.coords.lat, longitude: r.coords.lng };
+      const dKm = getDistance(rc, { latitude: location.latitude, longitude: location.longitude });
       return dKm < 0.1 && (r.type || "").toLowerCase() === incidentType.toLowerCase();
     });
 
     if (isDuplicate) {
-      Alert.alert("Duplicate Report", "A similar incident was already reported nearby.");
+      Alert.alert("Duplicate Report", "This incident already exists nearby.");
       return;
     }
 
-    // ✅ Step 3: Prepare the report payload
-    const payload = {
-      id: Date.now(), // unique ID
-      type: incidentType,
-      desc: incidentDesc,
-      coords: { lat: coords.latitude, lng: coords.longitude },
-      timestamp: new Date().toISOString(),
-    };
-
-    // ✅ Step 4: Add report to Firestore
-    await addDoc(collection(db, "reports"), payload);
-
-    // ✅ Step 5: Reset modal + confirmation
-    setReportModalVisible(false);
-    setIncidentType("");
-    setIncidentDesc("");
-    Alert.alert("✅ Report Submitted", "Thank you for contributing to safer routes!");
-  } catch (error) {
-    console.error("Report submission error:", error);
-    Alert.alert("Error", "Something went wrong while submitting your report.");
-  }
-};
-
+    try {
+      await addDoc(collection(db, "reports"), payload);
+      // local state will be updated via onSnapshot listener
+      setIncidentType("");
+      setIncidentDesc("");
+      setReportModalVisible(false);
+      Alert.alert("Thank You!", "Your report has been recorded anonymously.");
+    } catch (err) {
+      console.error("❌ Error saving report:", err);
+      Alert.alert("Error", "Could not save your report. Try again later.");
+    }
+  };
 
   // -------------------------
   // Safety-based routing
   // -------------------------
   const generateSafeRoute = async (destPlaceId) => {
-  try {
-    if (!location) {
-      console.warn("Current location unknown. Cannot generate route.");
-      return;
+    try {
+      if (!location) {
+        console.warn("Current location unknown. Cannot generate route.");
+        return;
+      }
+
+      // 1) Place details to get destination coords
+      const placeRes = await fetch(
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${destPlaceId}&key=${GOOGLE_MAPS_API_KEY}`
+      );
+      const placeJson = await placeRes.json();
+      const destLoc = placeJson?.result?.geometry?.location;
+      if (!destLoc) {
+        console.warn("Place details not found for:", destPlaceId);
+        return;
+      }
+      setDestination({ latitude: destLoc.lat, longitude: destLoc.lng });
+
+      // 2) Directions with alternatives
+      const dirRes = await fetch(
+        `https://maps.googleapis.com/maps/api/directions/json?origin=${location.latitude},${location.longitude}&destination=${destLoc.lat},${destLoc.lng}&alternatives=true&mode=walking&key=${GOOGLE_MAPS_API_KEY}`
+      );
+      const dirJson = await dirRes.json();
+      if (!dirJson.routes || dirJson.routes.length === 0) {
+        console.warn("No routes from Directions API");
+        return;
+      }
+
+      // 3) Score routes by safety & pick best
+      const scored = dirJson.routes.map((route) => {
+        const points = decodePolyline(route.overview_polyline?.points || "");
+        const penalty = calculateSafetyPenalty(points); // larger = worse
+        const distanceMeters = route.legs?.[0]?.distance?.value || 0;
+        const durationSec = route.legs?.[0]?.duration?.value || 0;
+
+        const distanceKm = distanceMeters / 1000;
+        // Score: prefer shorter routes and lower penalty. Tweak weights if needed.
+        const score = -distanceKm - penalty * 0.6 + 1 / Math.max(1, durationSec / 60);
+        return { points, score, penalty, distanceKm };
+      });
+
+      scored.sort((a, b) => b.score - a.score);
+      const best = scored[0];
+      if (best) {
+        setRouteCoords(best.points);
+      } else {
+        setRouteCoords([]);
+      }
+    } catch (err) {
+      console.error("Error generating safe route:", err);
     }
-
-    // 1) Get destination coordinates from Place Details
-    const placeRes = await fetch(
-      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${destPlaceId}&key=${GOOGLE_MAPS_API_KEY}`
-    );
-    const placeJson = await placeRes.json();
-    const destLoc = placeJson?.result?.geometry?.location;
-    if (!destLoc) return;
-
-    setDestination({ latitude: destLoc.lat, longitude: destLoc.lng });
-
-    // 2) Get alternative walking routes
-    const dirRes = await fetch(
-      `https://maps.googleapis.com/maps/api/directions/json?origin=${location.latitude},${location.longitude}&destination=${destLoc.lat},${destLoc.lng}&alternatives=true&mode=walking&key=${GOOGLE_MAPS_API_KEY}`
-    );
-    const dirJson = await dirRes.json();
-    if (!dirJson.routes || dirJson.routes.length === 0) return;
-
-    // 3) Score routes by safety
-    const scoredRoutes = dirJson.routes.map((route) => {
-      const points = decodePolyline(route.overview_polyline?.points || "");
-      const penalty = calculateSafetyPenalty(points); // Higher penalty = less safe
-      const distanceKm = (route.legs?.[0]?.distance?.value || 0) / 1000;
-
-      // Combine factors: lower distance + lower penalty = higher score
-      const score = -distanceKm - penalty * 0.6;
-      return { points, score, penalty };
-    });
-
-    // 4) Pick the safest route
-    scoredRoutes.sort((a, b) => b.score - a.score);
-    const bestRoute = scoredRoutes[0];
-    if (bestRoute) {
-      setRouteCoords(bestRoute.points);
-      setRouteColor(determineRouteColor(bestRoute.penalty)); // set color dynamically
-    } else {
-      setRouteCoords([]);
-    }
-  } catch (err) {
-    console.error("Error generating safe route:", err);
-  }
-};
+  };
 
   // Penalize route points near unsafe/crime spots
   const calculateSafetyPenalty = (points) => {
-  if (!safetyData || safetyData.length === 0 || !points || points.length === 0) return 0;
-  let penalty = 0;
-
-  const currentHour = new Date().getHours();
-
-  for (const p of points) {
-    // 🔹 Base safety check vs safety/crime CSVs
-    for (const spot of safetyData) {
-      const lat = parseFloat(spot.Latitude);
-      const lng = parseFloat(spot.Longitude);
-      if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
-
-      const dKm = getDistance(p, { latitude: lat, longitude: lng });
-      if (dKm < 0.15) {
-        if (spot._type === "crime") {
-          penalty += 10; // high penalty for crime zones
-        } else {
-          const score = parseFloat(spot["Safety_Score_0_10"] ?? 5);
-          penalty += Math.max(0, 10 - score) * 0.8;
+    if (!safetyData || safetyData.length === 0 || !points || points.length === 0) return 0;
+    let penalty = 0;
+    for (const p of points) {
+      for (const spot of safetyData) {
+        const lat = parseFloat(spot.Latitude);
+        const lng = parseFloat(spot.Longitude);
+        if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
+        const dKm = getDistance(p, { latitude: lat, longitude: lng });
+        if (dKm < 0.15) {
+          if (spot._type === "crime") {
+            penalty += 10;
+          } else {
+            const score = parseFloat(spot["Safety_Score_0_10"] ?? 5);
+            penalty += Math.max(0, 10 - score) * 0.8;
+          }
         }
       }
     }
+    return penalty / Math.max(1, points.length);
+  };
 
-    // 🌙 Night mode penalties
-    if (isNightMode && (currentHour >= 20 || currentHour <= 5)) {
-      penalty += 5; // base night penalty
-    }
-
-    // 🔦 Lighting or traffic assumption
-    // (you can later connect to real lighting data if available)
-    const randomTrafficFactor = Math.random(); // simulate traffic density
-    if (randomTrafficFactor < 0.3) {
-      penalty += 3; // assume low lighting/traffic
-    }
-
-    // 🏥 Reward if near a safe hub (police/hospital)
-    const safeHubs = [
-      { latitude: 19.115, longitude: 72.845 }, // sample hub
-      { latitude: 19.076, longitude: 72.8777 },
-    ];
-    for (const hub of safeHubs) {
-      const dHub = getDistance(p, hub);
-      if (dHub < 0.3) penalty -= 2; // small safety reward
-    }
-  }
-
-  return penalty / Math.max(1, points.length);
-};
-  // Haversine distance in KM
-  const getDistance = (loc1, loc2) => {
-    const R = 6371; // Earth radius in km
-    const dLat = ((loc2.latitude - loc1.latitude) * Math.PI) / 180;
-    const dLon = ((loc2.longitude - loc1.longitude) * Math.PI) / 180;
-    const lat1 = (loc1.latitude * Math.PI) / 180;
-    const lat2 = (loc2.latitude * Math.PI) / 180;
+  // Haversine distance (km)
+  const getDistance = (a, b) => {
+    const toRad = (x) => (x * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(b.latitude - a.latitude);
+    const dLon = toRad(b.longitude - a.longitude);
+    const lat1 = toRad(a.latitude);
+    const lat2 = toRad(b.latitude);
     const val =
       Math.sin(dLat / 2) ** 2 +
       Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
     return R * 2 * Math.atan2(Math.sqrt(val), Math.sqrt(1 - val));
   };
-
 
   // Decode Google polyline
   const decodePolyline = (encoded) => {
@@ -458,7 +420,6 @@ const checkLocationPermission = async () => {
     <View style={{ flex: 1 }}>
       {/* 🗺 MAP VIEW */}
       <MapView
-      
         style={{ flex: 1 }}
         region={{
           latitude: location?.latitude || 19.076,
@@ -477,7 +438,6 @@ const checkLocationPermission = async () => {
           })
           .map((spot, i) => (
             <Marker
-            
               key={`spot-${i}`}
               coordinate={{ latitude: spot.lat, longitude: spot.lng }}
               title={spot.name}
@@ -489,19 +449,8 @@ const checkLocationPermission = async () => {
                   ? "yellow"
                   : "red"
               }
-              
             />
           ))}
-          {/* ✅ Safe route line OUTSIDE markers */}
-{routeCoords.length > 0 && (
-  <Polyline
-    coordinates={routeCoords}
-    strokeWidth={6}
-    strokeColor={routeColor}
-  />
-)}
-
-        {/* 🔵 Crime Data Markers */}
            {/* ✅ Real-time reports from Firestore (safe version) */}
 {/* ✅ Real-time reports from Firestore (fixed version) */}
 {reports
@@ -673,29 +622,8 @@ const checkLocationPermission = async () => {
                     style={[styles.filterButtonText, filterType === opt.value && styles.filterButtonTextActive]}
                   >
                     {opt.label}
-                    <Text style={{ marginLeft: 5 }}>{filterType === opt.value ? "✔️" : "❌"}</Text>
-                    <View style={{ marginTop: 10 }}>
-  <TouchableOpacity
-  style={{
-    backgroundColor: isNightMode ? "#333" : "#007AFF",
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    alignSelf: "center",
-  }}
-  onPress={() => setIsNightMode((prev) => !prev)}
->
-  <Text style={{ color: "#fff", fontWeight: "bold" }}>
-    {isNightMode ? "🌙 Night Mode: ON" : "☀️ Night Mode: OFF"}
-  </Text>
-</TouchableOpacity>
-
-
-</View>
-
                   </Text>
                 </TouchableOpacity>
-                
               ))}
             </View>
           )}

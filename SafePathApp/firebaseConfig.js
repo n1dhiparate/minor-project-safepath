@@ -1,41 +1,53 @@
-// firebaseConfig.js
-
-// ✅ Import Firebase core functions
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { 
+  initializeAuth, 
+  getReactNativePersistence, 
+  signInAnonymously 
+} from "firebase/auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getFirestore } from "firebase/firestore";
-
-// ✅ Import environment variables from .env file
 import {
   EXPO_PUBLIC_FIREBASE_API_KEY,
-  EXPO_MNM_PROJECT_ID,
-  EXPO_MNM_MESSAGING_SENDER_ID,
-  EXPO_MNM_APP_ID,
-  EXPO_MNM_CLIENT_ID,
+  EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  EXPO_PUBLIC_FIREBASE_APP_ID,
 } from "@env";
 
-// ✅ Firebase configuration using your environment variables
+// ✅ Firebase config
 const firebaseConfig = {
   apiKey: EXPO_PUBLIC_FIREBASE_API_KEY,
-  authDomain: `${EXPO_MNM_PROJECT_ID}.firebaseapp.com`,
-  projectId: EXPO_MNM_PROJECT_ID,
-  storageBucket: `${EXPO_MNM_PROJECT_ID}.appspot.com`,
-  messagingSenderId: EXPO_MNM_MESSAGING_SENDER_ID,
-  appId: EXPO_MNM_APP_ID,
+  authDomain: EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-// ✅ Initialize Firebase App
+// ✅ Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// ✅ Initialize Firebase services
-const auth = getAuth(app);
+// ✅ Initialize Auth with persistence
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage),
+});
+
+// ✅ Firestore
 const db = getFirestore(app);
 
-// ✅ Google Client ID for Expo Google Auth
-const clientId =
-  EXPO_MNM_CLIENT_ID ||
-  "574601310005-bjv2p7gh6s6dci84dlslviq3t57kpmo4.apps.googleusercontent.com";
+// ✅ Sign in anonymously
+const ensureAuth = async () => {
+  try {
+    if (!auth.currentUser) {
+      await signInAnonymously(auth);
+      console.log("✅ Signed in anonymously to Firebase");
+    }
+  } catch (error) {
+    console.error("❌ Firebase Auth Error:", error);
+  }
+};
+ensureAuth();
 
-// ✅ Exports
-export { auth, db, clientId };
+export { app, db, auth };
 export default app;

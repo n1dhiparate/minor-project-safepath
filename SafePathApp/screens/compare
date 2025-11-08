@@ -18,6 +18,8 @@ import { Feather, MaterialIcons } from "@expo/vector-icons";
 import { GOOGLE_MAPS_API_KEY } from "@env";
 import { unsafeSpots } from "../assets/data/unsafeSpots";
 import Papa from "papaparse";
+import db from "../firebaseConfig";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 
 const { width } = Dimensions.get("window");
 
@@ -142,6 +144,58 @@ export default function Home() {
       ).start();
     }
   };
+const handleReport = async () => {
+  try {
+    // ✅ Get current user location
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Denied", "Location permission is required.");
+      return;
+    }
+    const loc = await Location.getCurrentPositionAsync({});
+    const latitude = loc.coords.latitude;
+    const longitude = loc.coords.longitude;
+
+    // ✅ Create local report object
+    const newReport = {
+      type: "General",
+      latitude,
+      longitude,
+      timestamp: new Date(),
+    };
+
+    // ✅ Show marker instantly
+    setReports((prev) => [...prev, newReport]);
+
+    // ✅ Optional: Duplicate check in Firebase
+    const reportsRef = collection(db, "reports");
+    const snapshot = await getDocs(reportsRef);
+    const duplicate = snapshot.docs.some((doc) => {
+      const data = doc.data();
+      const dist = Math.sqrt(
+        Math.pow(data.latitude - latitude, 2) +
+          Math.pow(data.longitude - longitude, 2)
+      );
+      return dist < 0.0005; // ~50m radius
+    });
+
+    if (duplicate) {
+      Alert.alert("⚠️ Notice", "A report already exists nearby.");
+      return;
+    }
+
+    // ✅ Save to Firestore
+    await addDoc(collection(db, "reports"), {
+      ...newReport,
+      timestamp: serverTimestamp(),
+    });
+
+    Alert.alert("✅ Report Submitted", "Thank you for reporting!");
+  } catch (error) {
+    console.error("Error submitting report:", error);
+    Alert.alert("Error", "Could not submit report.");
+  }
+};
 
   // 🔍 Search Places
   const handleSearch = async (text) => {
