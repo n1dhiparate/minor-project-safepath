@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Modal,
   Alert,
+  Linking,
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import * as Location from "expo-location";
@@ -19,7 +20,7 @@ import { GOOGLE_MAPS_API_KEY } from "@env";
 import { unsafeSpots } from "../assets/data/unsafeSpots";
 import Papa from "papaparse";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
+import { Audio } from "expo-audio"; // fixed import
 
 import { db } from "../firebaseConfig";
 import { collection, addDoc, onSnapshot } from "firebase/firestore";
@@ -37,17 +38,9 @@ const colors = {
 };
 
 export default function Home() {
-  
-  // ✅ Safe: hook is inside the function component
+  // ------------------ STATES ------------------
+  const [recording, setRecording] = useState(null);
   const [isNightMode, setIsNightMode] = useState(false);
-
-  const toggleisNightMode = () => {
-    setIsNightMode((prevMode) => !prevMode);
-    // Save preference to local storage or AsyncStorage if needed
-    AsyncStorage.setItem("isNightMode", JSON.stringify(!isNightMode));
-
-  };
-
   const [location, setLocation] = useState(null);
   const [query, setQuery] = useState("");
   const [predictions, setPredictions] = useState([]);
@@ -59,25 +52,27 @@ export default function Home() {
   const [filterType, setFilterType] = useState("none");
   const [showFilters, setShowFilters] = useState(false);
 
-  // new routing states (added)
   const [destination, setDestination] = useState(null);
   const [routeCoords, setRouteCoords] = useState([]);
 
-  // 🆕 Report feature states
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [incidentType, setIncidentType] = useState("");
   const [incidentDesc, setIncidentDesc] = useState("");
-  const [reports, setReports] = useState([]); // temporary markers for now
+  const [reports, setReports] = useState([]);
+  const [emergencyContacts, setEmergencyContacts] = useState([]);
+  const [contactModalVisible, setContactModalVisible] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
 
   const micAnim = useRef(new Animated.Value(1)).current;
   const drawerAnim = useRef(new Animated.Value(-width * 0.7)).current;
-  const [routeColor, setRouteColor] = useState("#007AFF"); // default blue
-const determineRouteColor = (penalty) => {
-  if (penalty < 3) return "green";       // very safe
-  else if (penalty < 7) return "yellow"; // moderate
-  else return "red";                      // unsafe
-};
+  const [routeColor, setRouteColor] = useState("#007AFF"); 
 
+  const determineRouteColor = (penalty) => {
+    if (penalty < 3) return "green";
+    else if (penalty < 7) return "yellow";
+    else return "red";
+  };
 
   const csvUrls = [
     {
@@ -90,9 +85,55 @@ const determineRouteColor = (penalty) => {
     },
   ];
 
- 
+  // ------------------ AUDIO RECORDING ------------------
+  const startRecording = async () => {
+    try {
+      const { granted } = await Audio.requestPermissionsAsync();
+      if (!granted)  {
+      Alert.alert("Permission denied", "Audio permission is required to record.");
+      return;
+    }
 
-  // 📍 Get current location
+      const rec = new Audio.Recording();
+      await rec.prepareToRecordAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
+      await rec.startAsync();
+      setRecording(rec);
+    console.log("Recording started...");
+  } catch (err) {
+    console.error("Recording failed:", err);
+  }
+};
+
+const stopRecording = async () => {
+  if (!recording) return;
+  try {
+    await recording.stopAndUnloadAsync();
+    const uri = recording.getURI();
+    console.log("Recording saved at:", uri);
+    setRecording(null);
+  } catch (err) {
+    console.error("Stopping recording failed:", err);
+  }
+};
+
+  // ------------------ SOS FUNCTION ------------------
+  const sendSOS = async () => {
+    if (!location) {
+      Alert.alert("Location not available", "Cannot send SOS without location.");
+      return;
+    }
+
+    const message = `🚨 Emergency! My current location: https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
+
+    emergencyContacts.forEach((contact) => {
+      const url = `sms:${contact.phone}?body=${encodeURIComponent(message)}`;
+      Linking.openURL(url).catch((err) => console.warn(err));
+    });
+
+    Alert.alert("SOS Sent", "Your emergency message has been sent!");
+  };
+
+  // ------------------ LOCATION ------------------
   useEffect(() => {
     (async () => {
       try {
@@ -106,7 +147,20 @@ const determineRouteColor = (penalty) => {
     })();
   }, []);
 
-  // 🧭 Compass
+  useEffect(() => {
+    const loadContacts = async () => {
+      const saved = await AsyncStorage.getItem("emergencyContacts");
+      if (saved) setEmergencyContacts(JSON.parse(saved));
+    };
+    loadContacts();
+  }, []);
+
+  const saveContacts = async (contacts) => {
+    setEmergencyContacts(contacts);
+    await AsyncStorage.setItem("emergencyContacts", JSON.stringify(contacts));
+  };
+
+  // ------------------ COMPASS ------------------
   useEffect(() => {
     const sub = Magnetometer.addListener((data) => {
       const angle = Math.atan2(data.y, data.x) * (180 / Math.PI);
@@ -115,7 +169,7 @@ const determineRouteColor = (penalty) => {
     return () => sub && sub.remove();
   }, []);
 
-  // 📊 Load CSV data
+  // ------------------ LOAD CSV DATA ------------------
   useEffect(() => {
     const loadSafetyData = async () => {
       try {
@@ -140,7 +194,7 @@ const determineRouteColor = (penalty) => {
     loadSafetyData();
   }, []);
 
-  // 🔥 Realtime reports listener from Firestore
+  // ------------------ FIRESTORE REAL-TIME REPORTS ------------------
   useEffect(() => {
     try {
       const q = collection(db, "reports");
@@ -149,12 +203,10 @@ const determineRouteColor = (penalty) => {
         (snapshot) => {
           const fetched = snapshot.docs.map((doc) => {
             const data = doc.data();
-            // normalize coords: if saved as { lat, lng } convert to { latitude, longitude }
             let coords = data.coords;
             if (coords && coords.lat !== undefined && coords.lng !== undefined) {
               coords = { latitude: coords.lat, longitude: coords.lng };
             }
-            // If coords already in {latitude, longitude} shape, keep as-is.
             return { id: doc.id, ...data, coords };
           });
           setReports(fetched);
@@ -169,7 +221,7 @@ const determineRouteColor = (penalty) => {
     }
   }, []);
 
-  // 🎤 Mic Animation
+  // ------------------ MIC ANIMATION ------------------
   const toggleMic = () => {
     if (isListening) {
       setIsListening(false);
@@ -196,30 +248,28 @@ const determineRouteColor = (penalty) => {
       ).start();
     }
   };
+  // ------------------ LOCATION PERMISSION CHECK ------------------
+  const checkLocationPermission = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Denied", "Location access is required to submit a report.");
+      return null;
+    }
 
-const checkLocationPermission = async () => {
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== "granted") {
-    Alert.alert("Permission Denied", "Location access is required to submit a report.");
-    return null;
-  }
+    const loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+      timeout: 10000,
+    });
 
-  // ✅ Try fetching location with high accuracy
-  const loc = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
-    timeout: 10000, // wait up to 10 seconds
-  });
+    if (!loc || !loc.coords) {
+      Alert.alert("Location Unavailable", "Couldn't fetch your location. Try again.");
+      return null;
+    }
 
-  if (!loc || !loc.coords) {
-    Alert.alert("Location Unavailable", "Couldn't fetch your location. Try again.");
-    return null;
-  }
+    return loc.coords;
+  };
 
-  return loc.coords;
-};
-
-
-  // 🔍 Search Places
+  // ------------------ SEARCH PLACES ------------------
   const handleSearch = async (text) => {
     setQuery(text);
     if (text.length > 2) {
@@ -238,159 +288,134 @@ const checkLocationPermission = async () => {
     } else setPredictions([]);
   };
 
-  // 🧩 Report Submit Handler
+  // ------------------ REPORT SUBMISSION ------------------
   const handleReportSubmit = async () => {
-  try {
-    // ✅ Step 1: Get and check location permissions
-    const coords = await checkLocationPermission();
-    if (!coords) {
-      Alert.alert("Location Error", "Unable to get your current location.");
-      return;
+    try {
+      const coords = await checkLocationPermission();
+      if (!coords) {
+        Alert.alert("Location Error", "Unable to get your current location.");
+        return;
+      }
+
+      const isDuplicate = reports.some((r) => {
+        const rc = r.coords.latitude !== undefined
+          ? r.coords
+          : { latitude: r.coords.lat, longitude: r.coords.lng };
+        const dKm = getDistance(rc, { latitude: coords.latitude, longitude: coords.longitude });
+        return dKm < 0.1 && (r.type || "").toLowerCase() === incidentType.toLowerCase();
+      });
+
+      if (isDuplicate) {
+        Alert.alert("Duplicate Report", "A similar incident was already reported nearby.");
+        return;
+      }
+
+      const payload = {
+        id: Date.now(),
+        type: incidentType,
+        desc: incidentDesc,
+        coords: { lat: coords.latitude, lng: coords.longitude },
+        timestamp: new Date().toISOString(),
+      };
+
+      await addDoc(collection(db, "reports"), payload);
+
+      setReportModalVisible(false);
+      setIncidentType("");
+      setIncidentDesc("");
+      Alert.alert("✅ Report Submitted", "Thank you for contributing to safer routes!");
+    } catch (error) {
+      console.error("Report submission error:", error);
+      Alert.alert("Error", "Something went wrong while submitting your report.");
     }
+  };
 
-    // ✅ Step 2: Simple duplicate report check (within 100 meters)
-    const isDuplicate = reports.some((r) => {
-      const rc = r.coords.latitude !== undefined
-        ? r.coords
-        : { latitude: r.coords.lat, longitude: r.coords.lng };
-      const dKm = getDistance(rc, { latitude: coords.latitude, longitude: coords.longitude });
-      return dKm < 0.1 && (r.type || "").toLowerCase() === incidentType.toLowerCase();
-    });
-
-    if (isDuplicate) {
-      Alert.alert("Duplicate Report", "A similar incident was already reported nearby.");
-      return;
-    }
-
-    // ✅ Step 3: Prepare the report payload
-    const payload = {
-      id: Date.now(), // unique ID
-      type: incidentType,
-      desc: incidentDesc,
-      coords: { lat: coords.latitude, lng: coords.longitude },
-      timestamp: new Date().toISOString(),
-    };
-
-    // ✅ Step 4: Add report to Firestore
-    await addDoc(collection(db, "reports"), payload);
-
-    // ✅ Step 5: Reset modal + confirmation
-    setReportModalVisible(false);
-    setIncidentType("");
-    setIncidentDesc("");
-    Alert.alert("✅ Report Submitted", "Thank you for contributing to safer routes!");
-  } catch (error) {
-    console.error("Report submission error:", error);
-    Alert.alert("Error", "Something went wrong while submitting your report.");
-  }
-};
-
-
-  // -------------------------
-  // Safety-based routing
-  // -------------------------
+  // ------------------ SAFE ROUTE GENERATION ------------------
   const generateSafeRoute = async (destPlaceId) => {
-  try {
-    if (!location) {
-      console.warn("Current location unknown. Cannot generate route.");
-      return;
+    try {
+      if (!location) {
+        console.warn("Current location unknown. Cannot generate route.");
+        return;
+      }
+
+      const placeRes = await fetch(
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${destPlaceId}&key=${GOOGLE_MAPS_API_KEY}`
+      );
+      const placeJson = await placeRes.json();
+      const destLoc = placeJson?.result?.geometry?.location;
+      if (!destLoc) return;
+
+      setDestination({ latitude: destLoc.lat, longitude: destLoc.lng });
+
+      const dirRes = await fetch(
+        `https://maps.googleapis.com/maps/api/directions/json?origin=${location.latitude},${location.longitude}&destination=${destLoc.lat},${destLoc.lng}&alternatives=true&mode=walking&key=${GOOGLE_MAPS_API_KEY}`
+      );
+      const dirJson = await dirRes.json();
+      if (!dirJson.routes || dirJson.routes.length === 0) return;
+
+      const scoredRoutes = dirJson.routes.map((route) => {
+        const points = decodePolyline(route.overview_polyline?.points || "");
+        const penalty = calculateSafetyPenalty(points);
+        const distanceKm = (route.legs?.[0]?.distance?.value || 0) / 1000;
+        const score = -distanceKm - penalty * 0.6;
+        return { points, score, penalty };
+      });
+
+      scoredRoutes.sort((a, b) => b.score - a.score);
+      const bestRoute = scoredRoutes[0];
+      if (bestRoute) {
+        setRouteCoords(bestRoute.points);
+        setRouteColor(determineRouteColor(bestRoute.penalty));
+      } else {
+        setRouteCoords([]);
+      }
+    } catch (err) {
+      console.error("Error generating safe route:", err);
     }
+  };
 
-    // 1) Get destination coordinates from Place Details
-    const placeRes = await fetch(
-      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${destPlaceId}&key=${GOOGLE_MAPS_API_KEY}`
-    );
-    const placeJson = await placeRes.json();
-    const destLoc = placeJson?.result?.geometry?.location;
-    if (!destLoc) return;
-
-    setDestination({ latitude: destLoc.lat, longitude: destLoc.lng });
-
-    // 2) Get alternative walking routes
-    const dirRes = await fetch(
-      `https://maps.googleapis.com/maps/api/directions/json?origin=${location.latitude},${location.longitude}&destination=${destLoc.lat},${destLoc.lng}&alternatives=true&mode=walking&key=${GOOGLE_MAPS_API_KEY}`
-    );
-    const dirJson = await dirRes.json();
-    if (!dirJson.routes || dirJson.routes.length === 0) return;
-
-    // 3) Score routes by safety
-    const scoredRoutes = dirJson.routes.map((route) => {
-      const points = decodePolyline(route.overview_polyline?.points || "");
-      const penalty = calculateSafetyPenalty(points); // Higher penalty = less safe
-      const distanceKm = (route.legs?.[0]?.distance?.value || 0) / 1000;
-
-      // Combine factors: lower distance + lower penalty = higher score
-      const score = -distanceKm - penalty * 0.6;
-      return { points, score, penalty };
-    });
-
-    // 4) Pick the safest route
-    scoredRoutes.sort((a, b) => b.score - a.score);
-    const bestRoute = scoredRoutes[0];
-    if (bestRoute) {
-      setRouteCoords(bestRoute.points);
-      setRouteColor(determineRouteColor(bestRoute.penalty)); // set color dynamically
-    } else {
-      setRouteCoords([]);
-    }
-  } catch (err) {
-    console.error("Error generating safe route:", err);
-  }
-};
-
-  // Penalize route points near unsafe/crime spots
+  // ------------------ SAFETY PENALTY ------------------
   const calculateSafetyPenalty = (points) => {
-  if (!safetyData || safetyData.length === 0 || !points || points.length === 0) return 0;
-  let penalty = 0;
+    if (!safetyData || safetyData.length === 0 || !points || points.length === 0) return 0;
+    let penalty = 0;
+    const currentHour = new Date().getHours();
 
-  const currentHour = new Date().getHours();
-
-  for (const p of points) {
-    // 🔹 Base safety check vs safety/crime CSVs
-    for (const spot of safetyData) {
-      const lat = parseFloat(spot.Latitude);
-      const lng = parseFloat(spot.Longitude);
-      if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
-
-      const dKm = getDistance(p, { latitude: lat, longitude: lng });
-      if (dKm < 0.15) {
-        if (spot._type === "crime") {
-          penalty += 10; // high penalty for crime zones
-        } else {
-          const score = parseFloat(spot["Safety_Score_0_10"] ?? 5);
-          penalty += Math.max(0, 10 - score) * 0.8;
+    for (const p of points) {
+      for (const spot of safetyData) {
+        const lat = parseFloat(spot.Latitude);
+        const lng = parseFloat(spot.Longitude);
+        if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
+        const dKm = getDistance(p, { latitude: lat, longitude: lng });
+        if (dKm < 0.15) {
+          if (spot._type === "crime") {
+            penalty += 10;
+          } else {
+            const score = parseFloat(spot["Safety_Score_0_10"] ?? 5);
+            penalty += Math.max(0, 10 - score) * 0.8;
+          }
         }
+      }
+
+      if (isNightMode && (currentHour >= 20 || currentHour <= 5)) penalty += 5;
+      const randomTrafficFactor = Math.random();
+      if (randomTrafficFactor < 0.3) penalty += 3;
+
+      const safeHubs = [
+        { latitude: 19.115, longitude: 72.845 },
+        { latitude: 19.076, longitude: 72.8777 },
+      ];
+      for (const hub of safeHubs) {
+        const dHub = getDistance(p, hub);
+        if (dHub < 0.3) penalty -= 2;
       }
     }
 
-    // 🌙 Night mode penalties
-    if (isNightMode && (currentHour >= 20 || currentHour <= 5)) {
-      penalty += 5; // base night penalty
-    }
+    return penalty / Math.max(1, points.length);
+  };
 
-    // 🔦 Lighting or traffic assumption
-    // (you can later connect to real lighting data if available)
-    const randomTrafficFactor = Math.random(); // simulate traffic density
-    if (randomTrafficFactor < 0.3) {
-      penalty += 3; // assume low lighting/traffic
-    }
-
-    // 🏥 Reward if near a safe hub (police/hospital)
-    const safeHubs = [
-      { latitude: 19.115, longitude: 72.845 }, // sample hub
-      { latitude: 19.076, longitude: 72.8777 },
-    ];
-    for (const hub of safeHubs) {
-      const dHub = getDistance(p, hub);
-      if (dHub < 0.3) penalty -= 2; // small safety reward
-    }
-  }
-
-  return penalty / Math.max(1, points.length);
-};
-  // Haversine distance in KM
+  // ------------------ HAVERSINE DISTANCE ------------------
   const getDistance = (loc1, loc2) => {
-    const R = 6371; // Earth radius in km
+    const R = 6371;
     const dLat = ((loc2.latitude - loc1.latitude) * Math.PI) / 180;
     const dLon = ((loc2.longitude - loc1.longitude) * Math.PI) / 180;
     const lat1 = (loc1.latitude * Math.PI) / 180;
@@ -401,19 +426,14 @@ const checkLocationPermission = async () => {
     return R * 2 * Math.atan2(Math.sqrt(val), Math.sqrt(1 - val));
   };
 
-
-  // Decode Google polyline
+  // ------------------ POLYLINE DECODING ------------------
   const decodePolyline = (encoded) => {
     if (!encoded) return [];
     let points = [];
-    let index = 0,
-      lat = 0,
-      lng = 0;
+    let index = 0, lat = 0, lng = 0;
 
     while (index < encoded.length) {
-      let b,
-        shift = 0,
-        result = 0;
+      let b, shift = 0, result = 0;
       do {
         b = encoded.charCodeAt(index++) - 63;
         result |= (b & 0x1f) << shift;
@@ -437,7 +457,7 @@ const checkLocationPermission = async () => {
     return points;
   };
 
-  // 🧾 Drawer Animation
+  // ------------------ DRAWER ANIMATION ------------------
   const openDrawer = () => {
     setDrawerOpen(true);
     Animated.timing(drawerAnim, {
@@ -453,12 +473,10 @@ const checkLocationPermission = async () => {
       useNativeDriver: false,
     }).start(() => setDrawerOpen(false));
   };
-
   return (
     <View style={{ flex: 1 }}>
       {/* 🗺 MAP VIEW */}
       <MapView
-      
         style={{ flex: 1 }}
         region={{
           latitude: location?.latitude || 19.076,
@@ -477,7 +495,6 @@ const checkLocationPermission = async () => {
           })
           .map((spot, i) => (
             <Marker
-            
               key={`spot-${i}`}
               coordinate={{ latitude: spot.lat, longitude: spot.lng }}
               title={spot.name}
@@ -489,54 +506,50 @@ const checkLocationPermission = async () => {
                   ? "yellow"
                   : "red"
               }
-              
             />
           ))}
-          {/* ✅ Safe route line OUTSIDE markers */}
-{routeCoords.length > 0 && (
-  <Polyline
-    coordinates={routeCoords}
-    strokeWidth={6}
-    strokeColor={routeColor}
-  />
-)}
 
-        {/* 🔵 Crime Data Markers */}
-           {/* ✅ Real-time reports from Firestore (safe version) */}
-{/* ✅ Real-time reports from Firestore (fixed version) */}
-{reports
-  .filter((r) => {
-    const c = r.coords || {};
-    const lat = c.latitude ?? c.lat;
-    const lng = c.longitude ?? c.lng;
-    return lat && lng && !isNaN(lat) && !isNaN(lng);
-  })
-  .map((r, index) => {
-    const c = r.coords || {};
-    const lat = c.latitude ?? c.lat;
-    const lng = c.longitude ?? c.lng;
+        {/* ✅ Safe route line */}
+        {routeCoords.length > 0 && (
+          <Polyline
+            coordinates={routeCoords}
+            strokeWidth={6}
+            strokeColor={routeColor}
+          />
+        )}
 
-    return (
-      <Marker
-        key={index}
-        coordinate={{ latitude: lat, longitude: lng }}
-        title={`Report: ${r.type || "Incident"}`}
-        description={
-          r.timestamp
-            ? new Date(
-                r.timestamp.seconds
-                  ? r.timestamp.seconds * 1000
-                  : r.timestamp
-              ).toLocaleString()
-            : "Recent report"
-        }
-        pinColor={colors.reportMarker}
-      />
-    );
-  })}
+        {/* 🔵 Real-time Firestore reports */}
+        {reports
+          .filter((r) => {
+            const c = r.coords || {};
+            const lat = c.latitude ?? c.lat;
+            const lng = c.longitude ?? c.lng;
+            return lat && lng && !isNaN(lat) && !isNaN(lng);
+          })
+          .map((r, index) => {
+            const c = r.coords || {};
+            const lat = c.latitude ?? c.lat;
+            const lng = c.longitude ?? c.lng;
 
-
-        </MapView>
+            return (
+              <Marker
+                key={index}
+                coordinate={{ latitude: lat, longitude: lng }}
+                title={`Report: ${r.type || "Incident"}`}
+                description={
+                  r.timestamp
+                    ? new Date(
+                        r.timestamp.seconds
+                          ? r.timestamp.seconds * 1000
+                          : r.timestamp
+                      ).toLocaleString()
+                    : "Recent report"
+                }
+                pinColor={colors.reportMarker}
+              />
+            );
+          })}
+      </MapView>
 
       {/* 🔍 Top bar: menu + search + mic */}
       <View style={styles.topBar}>
@@ -553,13 +566,17 @@ const checkLocationPermission = async () => {
           />
           <TouchableOpacity onPress={toggleMic}>
             <Animated.View style={{ transform: [{ scale: micAnim }] }}>
-              <MaterialIcons name="mic" size={22} color={isListening ? "#d32f2f" : "#555"} />
+              <MaterialIcons
+                name="mic"
+                size={22}
+                color={isListening ? "#d32f2f" : "#555"}
+              />
             </Animated.View>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Autocomplete predictions list (appears under top bar) */}
+      {/* Autocomplete predictions */}
       {predictions && predictions.length > 0 && (
         <View
           style={{
@@ -606,25 +623,41 @@ const checkLocationPermission = async () => {
         </Animated.View>
       </View>
 
-      {/* 🟣 Floating Action Button (Added Here) */}
+      {/* 🟣 Floating Action Button */}
       <>
-        <TouchableOpacity onPress={() => setMenuOpen(!menuOpen)} style={styles.quickNavButton}>
+        <TouchableOpacity
+          onPress={() => setMenuOpen(!menuOpen)}
+          style={styles.quickNavButton}
+        >
           <Feather name={menuOpen ? "x" : "plus"} size={26} color="#fff" />
         </TouchableOpacity>
 
         {menuOpen && (
           <>
-            <TouchableOpacity style={[styles.smallButton, { right: 90, bottom: 30 }]}>
+            <TouchableOpacity
+              style={[styles.smallButton, { right: 90, bottom: 30 }]}
+            >
               <Feather name="map" size={20} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.smallButton, { right: 70, bottom: 85 }]}>
+            <TouchableOpacity
+              style={[styles.smallButton, { right: 70, bottom: 85 }]}
+            >
               <Feather name="shield" size={20} color="#fff" />
             </TouchableOpacity>
-           <TouchableOpacity
+            <TouchableOpacity
               style={[styles.smallButton, { right: 15, bottom: 95 }]}
               onPress={() => setReportModalVisible(true)}
             >
               <Feather name="alert-triangle" size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.smallButton,
+                { bottom: 150, right: 25, backgroundColor: "red" },
+              ]}
+              onPress={sendSOS}
+            >
+              <Feather name="alert-octagon" size={24} color="#fff" />
             </TouchableOpacity>
           </>
         )}
@@ -650,7 +683,9 @@ const checkLocationPermission = async () => {
             style={styles.mainFilterButton}
             onPress={() => setShowFilters(!showFilters)}
           >
-            <Text style={styles.mainFilterButtonText}>🔍 Filter: {filterType.toUpperCase()}</Text>
+            <Text style={styles.mainFilterButtonText}>
+              🔍 Filter: {filterType.toUpperCase()}
+            </Text>
           </TouchableOpacity>
 
           {showFilters && (
@@ -663,83 +698,166 @@ const checkLocationPermission = async () => {
               ].map((opt) => (
                 <TouchableOpacity
                   key={opt.value}
-                  style={[styles.filterButton, filterType === opt.value && styles.filterButtonActive]}
+                  style={[
+                    styles.filterButton,
+                    filterType === opt.value && styles.filterButtonActive,
+                  ]}
                   onPress={() => {
                     setFilterType(opt.value);
                     setShowFilters(false);
                   }}
                 >
                   <Text
-                    style={[styles.filterButtonText, filterType === opt.value && styles.filterButtonTextActive]}
+                    style={[
+                      styles.filterButtonText,
+                      filterType === opt.value && styles.filterButtonTextActive,
+                    ]}
                   >
                     {opt.label}
-                    <Text style={{ marginLeft: 5 }}>{filterType === opt.value ? "✔️" : "❌"}</Text>
+                    <Text style={{ marginLeft: 5 }}>
+                      {filterType === opt.value ? "✔️" : "❌"}
+                    </Text>
                     <View style={{ marginTop: 10 }}>
-  <TouchableOpacity
-  style={{
-    backgroundColor: isNightMode ? "#333" : "#007AFF",
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    alignSelf: "center",
-  }}
-  onPress={() => setIsNightMode((prev) => !prev)}
->
-  <Text style={{ color: "#fff", fontWeight: "bold" }}>
-    {isNightMode ? "🌙 Night Mode: ON" : "☀️ Night Mode: OFF"}
-  </Text>
-</TouchableOpacity>
-
-
-</View>
-
+                      <TouchableOpacity
+                        style={{
+                          backgroundColor: isNightMode ? "#333" : "#007AFF",
+                          paddingVertical: 8,
+                          paddingHorizontal: 14,
+                          borderRadius: 8,
+                          alignSelf: "center",
+                        }}
+                        onPress={() => setIsNightMode((prev) => !prev)}
+                      >
+                        <Text
+                          style={{ color: "#fff", fontWeight: "bold" }}
+                        >
+                          {isNightMode
+                            ? "🌙 Night Mode: ON"
+                            : "☀️ Night Mode: OFF"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </Text>
                 </TouchableOpacity>
-                
               ))}
             </View>
           )}
         </View>
-
-            {/* 🧾 Report Modal */}
-              <Modal
-                visible={reportModalVisible}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setReportModalVisible(false)}
-              >
-                <View style={styles.modalOverlay}>
-                  <View style={styles.modalBox}>
-                    <Text style={styles.modalTitle}>Report an Incident</Text>
-                    <TextInput
-                      placeholder="Type (e.g., Poor Lighting, Harassment)"
-                      value={incidentType}
-                      onChangeText={setIncidentType}
-                      style={styles.modalInput}
-                    />
-                    <TextInput
-                      placeholder="Description..."
-                      value={incidentDesc}
-                      onChangeText={setIncidentDesc}
-                      style={[styles.modalInput, { height: 80 }]}
-                      multiline
-                    />
-                    <View style={styles.modalButtons}>
-                      <TouchableOpacity onPress={() => setReportModalVisible(false)} style={styles.cancelBtn}>
-                        <Text style={styles.cancelTxt}>Cancel</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={handleReportSubmit} style={styles.submitBtn}>
-                        <Text style={styles.submitTxt}>Submit</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              </Modal>
       </View>
+
+      {/* 🧾 Report Modal */}
+      <Modal
+        visible={reportModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReportModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Report an Incident</Text>
+            <TextInput
+              placeholder="Type (e.g., Poor Lighting, Harassment)"
+              value={incidentType}
+              onChangeText={setIncidentType}
+              style={styles.modalInput}
+            />
+            <TextInput
+              placeholder="Description..."
+              value={incidentDesc}
+              onChangeText={setIncidentDesc}
+              style={[styles.modalInput, { height: 80 }]}
+              multiline
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                onPress={() => setReportModalVisible(false)}
+                style={styles.cancelBtn}
+              >
+                <Text style={styles.cancelTxt}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleReportSubmit}
+                style={styles.submitBtn}
+              >
+                <Text style={styles.submitTxt}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      {/* 🧾 Emergency Contacts Modal */}
+      <Modal visible={contactModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Emergency Contacts</Text>
+
+            <FlatList
+              data={emergencyContacts}
+              keyExtractor={(item, idx) => idx.toString()}
+              renderItem={({ item, index }) => (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    marginVertical: 5,
+                  }}
+                >
+                  <Text>
+                    {item.name} ({item.phone})
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const newContacts = emergencyContacts.filter(
+                        (_, i) => i !== index
+                      );
+                      saveContacts(newContacts);
+                    }}
+                  >
+                    <Text style={{ color: "red" }}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            />
+
+            <TextInput
+              placeholder="Name"
+              value={newName}
+              onChangeText={setNewName}
+              style={styles.modalInput}
+            />
+            <TextInput
+              placeholder="Phone"
+              value={newPhone}
+              onChangeText={setNewPhone}
+              style={styles.modalInput}
+              keyboardType="phone-pad"
+            />
+
+            <TouchableOpacity
+              onPress={() => {
+                const updated = [
+                  ...emergencyContacts,
+                  { name: newName, phone: newPhone },
+                ];
+                saveContacts(updated);
+                setNewName("");
+                setNewPhone("");
+              }}
+              style={styles.submitBtn}
+            >
+              <Text style={styles.submitTxt}>Add Contact</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* 👤 Drawer */}
       {drawerOpen && (
-        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPressOut={closeDrawer}>
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPressOut={closeDrawer}
+        >
           <Animated.View style={[styles.drawerContainer, { left: drawerAnim }]}>
             <View style={styles.profileHeader}>
               <MaterialIcons name="account-circle" size={60} color="#4a4a4a" />
@@ -889,7 +1007,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   footerText: { fontSize: 12, color: "#888", textAlign: "center" },
-modalOverlay: {
+  modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
