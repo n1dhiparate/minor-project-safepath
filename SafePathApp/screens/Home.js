@@ -30,7 +30,7 @@ const { width } = Dimensions.get("window");
 const colors = {
   primary: "#C9E4C5",
   accent: "#F7DAD9",
-  background: "#FFF9F0",
+  background: "#fff9f0ff",
   buttons: "#9BB8AD",
   text: "#444444",
   crimeMarker: "#800080",
@@ -473,18 +473,38 @@ const stopRecording = async () => {
       useNativeDriver: false,
     }).start(() => setDrawerOpen(false));
   };
+
+  const nightMapStyle = [
+  { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#38414e" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#17263c" }],
+  },
+];
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1   }}>
+      
       {/* 🗺 MAP VIEW */}
       <MapView
-        style={{ flex: 1 }}
-        region={{
-          latitude: location?.latitude || 19.076,
-          longitude: location?.longitude || 72.8777,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }}
-      >
+  style={[styles.map, { flex: 1 }]}
+  customMapStyle={isNightMode ? nightMapStyle : []}
+  region={{
+    latitude: location?.latitude || 19.076,
+    longitude: location?.longitude || 72.8777,
+    latitudeDelta: 0.01,
+    longitudeDelta: 0.01,
+  }}
+>
+
         {/* 🔴 Unsafe Spots */}
         {unsafeSpots
           .filter((spot) => {
@@ -629,35 +649,32 @@ const stopRecording = async () => {
           onPress={() => setMenuOpen(!menuOpen)}
           style={styles.quickNavButton}
         >
-          <Feather name={menuOpen ? "x" : "plus"} size={26} color="#fff" />
+          <Feather name={menuOpen ? "x" : "plus"} size={25} color="#fff" />
         </TouchableOpacity>
 
         {menuOpen && (
           <>
             <TouchableOpacity
-              style={[styles.smallButton, { right: 90, bottom: 30 }]}
+              style={[styles.smallButton, { right: 90, bottom: 5 }]}
             >
               <Feather name="map" size={20} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.smallButton, { right: 70, bottom: 85 }]}
+              style={[styles.smallButton, { right: 90, bottom: 55 }]}
             >
               <Feather name="shield" size={20} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.smallButton, { right: 15, bottom: 95 }]}
+              style={[styles.smallButton, { right: 55, bottom: 95 }]}
               onPress={() => setReportModalVisible(true)}
             >
               <Feather name="alert-triangle" size={20} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity
-              style={[
-                styles.smallButton,
-                { bottom: 150, right: 25, backgroundColor: "red" },
-              ]}
+              style={[styles.smallButton, { right: 5, bottom: 90 }]}
               onPress={sendSOS}
             >
-              <Feather name="alert-octagon" size={24} color="#fff" />
+              <Feather name="alert-octagon" size={20} color="#f7f3f3ff" />
             </TouchableOpacity>
           </>
         )}
@@ -717,32 +734,14 @@ const stopRecording = async () => {
                     <Text style={{ marginLeft: 5 }}>
                       {filterType === opt.value ? "✔️" : "❌"}
                     </Text>
-                    <View style={{ marginTop: 10 }}>
-                      <TouchableOpacity
-                        style={{
-                          backgroundColor: isNightMode ? "#333" : "#007AFF",
-                          paddingVertical: 8,
-                          paddingHorizontal: 14,
-                          borderRadius: 8,
-                          alignSelf: "center",
-                        }}
-                        onPress={() => setIsNightMode((prev) => !prev)}
-                      >
-                        <Text
-                          style={{ color: "#fff", fontWeight: "bold" }}
-                        >
-                          {isNightMode
-                            ? "🌙 Night Mode: ON"
-                            : "☀️ Night Mode: OFF"}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+                    
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
           )}
         </View>
+        
       </View>
 
       {/* 🧾 Report Modal */}
@@ -861,7 +860,7 @@ const stopRecording = async () => {
           <Animated.View style={[styles.drawerContainer, { left: drawerAnim }]}>
             <View style={styles.profileHeader}>
               <MaterialIcons name="account-circle" size={60} color="#4a4a4a" />
-              <Text style={styles.accName}>Mrudul & Nidhi</Text>
+              <Text style={styles.accName}>Mrudul </Text>
             </View>
 
             <View style={styles.optionSection}>
@@ -885,6 +884,24 @@ const stopRecording = async () => {
           </Animated.View>
         </TouchableOpacity>
       )}
+      <View style={styles.nightContainer}>
+        <TouchableOpacity
+          style={{
+            backgroundColor: isNightMode ? "#333" : "#fff9f0ff",
+             paddingVertical: 10,
+             paddingHorizontal: 10,
+             borderRadius: 100,
+             alignSelf: "center",
+             }}
+           onPress={() => setIsNightMode((prev) => !prev)}
+        >
+        <Text
+           style={{ color: isNightMode ? "#fff" : "#000000ff", fontWeight: "bold" }}
+         >
+            {isNightMode? "🌙": "☀️"}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -924,6 +941,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     padding: 10,
     borderRadius: 40,
+    elevation: 8,
+  },
+  nightContainer: {
+    position: "absolute",
+    top: 170,
+    right: 15,
     elevation: 8,
   },
   quickNavButton: {

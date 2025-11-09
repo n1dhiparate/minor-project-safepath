@@ -3,7 +3,8 @@ import { StyleSheet, View } from "react-native";
 
 export default function App() {
   return (
-    <View style={styles.container}>
+    <View style={[styles.container,{ backgroundColor: isNightMode ? "#121212" : "#fff9f0ff" },]}
+>
       <MapView
         style={styles.map}
         initialRegion={{
@@ -18,6 +19,10 @@ export default function App() {
           title="Santacruz"
           description="Start point"
         />
+        {routeCoords.length > 0 && (
+  <Polyline coordinates={routeCoords} strokeColor="#007AFF" strokeWidth={5} />
+)}
+
       </MapView>
     </View>
   );
