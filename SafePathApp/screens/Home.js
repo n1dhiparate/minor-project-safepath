@@ -8,11 +8,10 @@ import {
   Animated,
   Dimensions,
   StyleSheet,
-  Modal,
   Alert,
   Linking,
 } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
+import MapView, { Marker, Polyline, Circle } from "react-native-maps";
 import * as Location from "expo-location";
 import { Magnetometer } from "expo-sensors";
 import { Feather, MaterialIcons } from "@expo/vector-icons";
@@ -20,10 +19,16 @@ import { GOOGLE_MAPS_API_KEY } from "@env";
 import { unsafeSpots } from "../assets/data/unsafeSpots";
 import Papa from "papaparse";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Audio } from "expo-audio"; // fixed import
+import { Audio } from "expo-audio";
 
+// Firebase imports
 import { db } from "../firebaseConfig";
 import { collection, addDoc, onSnapshot } from "firebase/firestore";
+
+// Offline Safe Hub utilities
+import { initDb } from "../utils/offline/db";
+import { getAllPlaces } from "../utils/offline/places";
+import { loadCsvDataOnce } from "../utils/offline/loadCsv";
 
 const { width } = Dimensions.get("window");
 
@@ -66,7 +71,7 @@ export default function Home() {
 
   const micAnim = useRef(new Animated.Value(1)).current;
   const drawerAnim = useRef(new Animated.Value(-width * 0.7)).current;
-  const [routeColor, setRouteColor] = useState("#007AFF"); 
+  const [routeColor, setRouteColor] = useState("#007AFF");
 
   const determineRouteColor = (penalty) => {
     if (penalty < 3) return "green";
@@ -85,36 +90,38 @@ export default function Home() {
     },
   ];
 
+  const [safePlaces, setSafePlaces] = useState([]); // for offline safe hubs
+
   // ------------------ AUDIO RECORDING ------------------
   const startRecording = async () => {
     try {
       const { granted } = await Audio.requestPermissionsAsync();
-      if (!granted)  {
-      Alert.alert("Permission denied", "Audio permission is required to record.");
-      return;
-    }
+      if (!granted) {
+        Alert.alert("Permission denied", "Audio permission is required to record.");
+        return;
+      }
 
       const rec = new Audio.Recording();
       await rec.prepareToRecordAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
       await rec.startAsync();
       setRecording(rec);
-    console.log("Recording started...");
-  } catch (err) {
-    console.error("Recording failed:", err);
-  }
-};
+      console.log("Recording started...");
+    } catch (err) {
+      console.error("Recording failed:", err);
+    }
+  };
 
-const stopRecording = async () => {
-  if (!recording) return;
-  try {
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
-    console.log("Recording saved at:", uri);
-    setRecording(null);
-  } catch (err) {
-    console.error("Stopping recording failed:", err);
-  }
-};
+  const stopRecording = async () => {
+    if (!recording) return;
+    try {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      console.log("Recording saved at:", uri);
+      setRecording(null);
+    } catch (err) {
+      console.error("Stopping recording failed:", err);
+    }
+  };
 
   // ------------------ SOS FUNCTION ------------------
   const sendSOS = async () => {
@@ -137,15 +144,73 @@ const stopRecording = async () => {
   useEffect(() => {
     (async () => {
       try {
+        console.log("📡 Requesting location permission...");
         let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") return;
-        let loc = await Location.getCurrentPositionAsync({});
-        setLocation(loc.coords);
+
+        if (status !== "granted") {
+          console.warn("⚠️ Location permission denied. Using fallback region.");
+          setLocation({
+            latitude: 19.076,
+            longitude: 72.8777,
+          });
+          return;
+        }
+       
+        // Try to get precise location
+        let loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+
+        if (loc && loc.coords) {
+          console.log("📍 Current location:", loc.coords);
+          setLocation(loc.coords);
+        } else {
+          console.warn("⚠️ Could not fetch location, using fallback.");
+          setLocation({
+            latitude: 19.076,
+            longitude: 72.8777,
+          });
+        }
       } catch (err) {
-        console.error("Error getting location:", err);
+        console.error("❌ Error getting location:", err);
+        setLocation({
+          latitude: 19.076,
+          longitude: 72.8777,
+        });
       }
     })();
   }, []);
+
+   useEffect(() => {
+         let subscription;
+         const startLocationWatch = async () => {
+          try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== "granted") {
+        setLocation({ latitude: 19.076, longitude: 72.8777 });
+        return;
+      }
+
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          distanceInterval: 5,
+        },
+        (loc) => setLocation(loc.coords)
+      );
+    } catch (err) {
+      console.error("❌ Error getting location:", err);
+    }
+  };
+
+  startLocationWatch();     // Call the async function, but don't use hooks inside it
+
+  return () => {
+    if (subscription) subscription.remove();
+  };
+}, []);
+
 
   useEffect(() => {
     const loadContacts = async () => {
@@ -221,6 +286,18 @@ const stopRecording = async () => {
     }
   }, []);
 
+  // Offline Safe Hubs Initialization
+  useEffect(() => {
+    (async () => {
+      console.log("🚀 Initializing offline Safe Hubs...");
+      await initDb();
+      await loadCsvDataOnce();
+      const places = await getAllPlaces();
+      console.log("🧭 Safe Places:", places.length);
+      setSafePlaces(places);
+    })();
+  }, []);
+
   // ------------------ MIC ANIMATION ------------------
   const toggleMic = () => {
     if (isListening) {
@@ -248,6 +325,7 @@ const stopRecording = async () => {
       ).start();
     }
   };
+
   // ------------------ LOCATION PERMISSION CHECK ------------------
   const checkLocationPermission = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -298,9 +376,7 @@ const stopRecording = async () => {
       }
 
       const isDuplicate = reports.some((r) => {
-        const rc = r.coords.latitude !== undefined
-          ? r.coords
-          : { latitude: r.coords.lat, longitude: r.coords.lng };
+        const rc = r.coords.latitude !== undefined ? r.coords : { latitude: r.coords.lat, longitude: r.coords.lng };
         const dKm = getDistance(rc, { latitude: coords.latitude, longitude: coords.longitude });
         return dKm < 0.1 && (r.type || "").toLowerCase() === incidentType.toLowerCase();
       });
@@ -430,10 +506,14 @@ const stopRecording = async () => {
   const decodePolyline = (encoded) => {
     if (!encoded) return [];
     let points = [];
-    let index = 0, lat = 0, lng = 0;
+    let index = 0,
+      lat = 0,
+      lng = 0;
 
     while (index < encoded.length) {
-      let b, shift = 0, result = 0;
+      let b,
+        shift = 0,
+        result = 0;
       do {
         b = encoded.charCodeAt(index++) - 63;
         result |= (b & 0x1f) << shift;
@@ -475,35 +555,68 @@ const stopRecording = async () => {
   };
 
   const nightMapStyle = [
-  { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-  {
-    featureType: "road",
-    elementType: "geometry",
-    stylers: [{ color: "#38414e" }],
-  },
-  {
-    featureType: "water",
-    elementType: "geometry",
-    stylers: [{ color: "#17263c" }],
-  },
-];
+    { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+    { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+    {
+      featureType: "road",
+      elementType: "geometry",
+      stylers: [{ color: "#38414e" }],
+    },
+    {
+      featureType: "water",
+      elementType: "geometry",
+      stylers: [{ color: "#17263c" }],
+    },
+  ];
 
   return (
-    <View style={{ flex: 1   }}>
-      
+    <View style={{ flex: 1 }}>
       {/* 🗺 MAP VIEW */}
       <MapView
-  style={[styles.map, { flex: 1 }]}
-  customMapStyle={isNightMode ? nightMapStyle : []}
-  region={{
-    latitude: location?.latitude || 19.076,
-    longitude: location?.longitude || 72.8777,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  }}
->
+        style={[styles.map, { flex: 1 }]}
+        customMapStyle={isNightMode ? nightMapStyle : []}
+        region={{
+          latitude: location?.latitude || 19.076,
+          longitude: location?.longitude || 72.8777,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }}
+      >
+        {/* Add this inside your <MapView> */}
+{location && (
+  <>
+    <Marker
+      coordinate={{ latitude: location.latitude, longitude: location.longitude }}
+      title="You are here"
+      pinColor="blue"
+    />
+    <Circle
+      center={{ latitude: location.latitude, longitude: location.longitude }}
+      radius={20}
+      strokeColor="rgba(0,123,255,0.8)"
+      fillColor="rgba(0,123,255,0.3)"
+      strokeWidth={2}
+    />
+  </>
+)}
+
+        {/* ✅ Safe Hubs */}
+        {safePlaces.map((p) => (
+          <Marker
+            key={p.id || `${p.lat}-${p.lng}`}
+            coordinate={{ latitude: p.lat, longitude: p.lng }}
+            title={p.name || "Safe Hub"}
+            description={p.type || ""}
+            pinColor={
+              p.type === "police"
+                ? "blue"
+                : p.type === "hospital"
+                ? "red"
+                : "green"
+            }
+          />
+        ))}
 
         {/* 🔴 Unsafe Spots */}
         {unsafeSpots
@@ -654,14 +767,10 @@ const stopRecording = async () => {
 
         {menuOpen && (
           <>
-            <TouchableOpacity
-              style={[styles.smallButton, { right: 90, bottom: 5 }]}
-            >
+            <TouchableOpacity style={[styles.smallButton, { right: 90, bottom: 5 }]}>
               <Feather name="map" size={20} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.smallButton, { right: 90, bottom: 55 }]}
-            >
+            <TouchableOpacity style={[styles.smallButton, { right: 90, bottom: 55 }]}>
               <Feather name="shield" size={20} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity
@@ -734,171 +843,33 @@ const stopRecording = async () => {
                     <Text style={{ marginLeft: 5 }}>
                       {filterType === opt.value ? "✔️" : "❌"}
                     </Text>
-                    
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
           )}
         </View>
-        
       </View>
 
-      {/* 🧾 Report Modal */}
-      <Modal
-        visible={reportModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setReportModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Report an Incident</Text>
-            <TextInput
-              placeholder="Type (e.g., Poor Lighting, Harassment)"
-              value={incidentType}
-              onChangeText={setIncidentType}
-              style={styles.modalInput}
-            />
-            <TextInput
-              placeholder="Description..."
-              value={incidentDesc}
-              onChangeText={setIncidentDesc}
-              style={[styles.modalInput, { height: 80 }]}
-              multiline
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                onPress={() => setReportModalVisible(false)}
-                style={styles.cancelBtn}
-              >
-                <Text style={styles.cancelTxt}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleReportSubmit}
-                style={styles.submitBtn}
-              >
-                <Text style={styles.submitTxt}>Submit</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-      {/* 🧾 Emergency Contacts Modal */}
-      <Modal visible={contactModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Emergency Contacts</Text>
-
-            <FlatList
-              data={emergencyContacts}
-              keyExtractor={(item, idx) => idx.toString()}
-              renderItem={({ item, index }) => (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    marginVertical: 5,
-                  }}
-                >
-                  <Text>
-                    {item.name} ({item.phone})
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      const newContacts = emergencyContacts.filter(
-                        (_, i) => i !== index
-                      );
-                      saveContacts(newContacts);
-                    }}
-                  >
-                    <Text style={{ color: "red" }}>Remove</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            />
-
-            <TextInput
-              placeholder="Name"
-              value={newName}
-              onChangeText={setNewName}
-              style={styles.modalInput}
-            />
-            <TextInput
-              placeholder="Phone"
-              value={newPhone}
-              onChangeText={setNewPhone}
-              style={styles.modalInput}
-              keyboardType="phone-pad"
-            />
-
-            <TouchableOpacity
-              onPress={() => {
-                const updated = [
-                  ...emergencyContacts,
-                  { name: newName, phone: newPhone },
-                ];
-                saveContacts(updated);
-                setNewName("");
-                setNewPhone("");
-              }}
-              style={styles.submitBtn}
-            >
-              <Text style={styles.submitTxt}>Add Contact</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 👤 Drawer */}
-      {drawerOpen && (
-        <TouchableOpacity
-          style={styles.overlay}
-          activeOpacity={1}
-          onPressOut={closeDrawer}
-        >
-          <Animated.View style={[styles.drawerContainer, { left: drawerAnim }]}>
-            <View style={styles.profileHeader}>
-              <MaterialIcons name="account-circle" size={60} color="#4a4a4a" />
-              <Text style={styles.accName}>Mrudul </Text>
-            </View>
-
-            <View style={styles.optionSection}>
-              {[
-                ["settings", "Settings"],
-                ["bell", "Emergency Options"],
-                ["map-pin", "Saved Locations"],
-                ["user", "Profile Settings"],
-              ].map(([icon, label]) => (
-                <TouchableOpacity key={label} style={styles.optionItem}>
-                  <Feather name={icon} size={20} color="#333" />
-                  <Text style={styles.optionText}>{label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.footerSection}>
-              <Text style={styles.footerText}>App version 1.0.0</Text>
-              <Text style={styles.footerText}>Developed by Team SafePath</Text>
-            </View>
-          </Animated.View>
-        </TouchableOpacity>
-      )}
+      {/* 🌙 Night Mode Toggle */}
       <View style={styles.nightContainer}>
         <TouchableOpacity
           style={{
             backgroundColor: isNightMode ? "#333" : "#fff9f0ff",
-             paddingVertical: 10,
-             paddingHorizontal: 10,
-             borderRadius: 100,
-             alignSelf: "center",
-             }}
-           onPress={() => setIsNightMode((prev) => !prev)}
+            paddingVertical: 10,
+            paddingHorizontal: 10,
+            borderRadius: 100,
+            alignSelf: "center",
+          }}
+          onPress={() => setIsNightMode((prev) => !prev)}
         >
-        <Text
-           style={{ color: isNightMode ? "#fff" : "#000000ff", fontWeight: "bold" }}
-         >
-            {isNightMode? "🌙": "☀️"}
+          <Text
+            style={{
+              color: isNightMode ? "#fff" : "#000000ff",
+              fontWeight: "bold",
+            }}
+          >
+            {isNightMode ? "🌙" : "☀️"}
           </Text>
         </TouchableOpacity>
       </View>
