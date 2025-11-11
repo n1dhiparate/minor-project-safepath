@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Alert,
   Linking,
+  Modal,
 } from "react-native";
 import MapView, { Marker, Polyline, Circle } from "react-native-maps";
 import * as Location from "expo-location";
@@ -850,7 +851,71 @@ export default function Home() {
           )}
         </View>
       </View>
+ {/* 🧾 Report Modal */}
+              <Modal
+                visible={reportModalVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setReportModalVisible(false)}
+              >
+                <View style={styles.modalOverlay}>
+                  <View style={styles.modalBox}>
+                    <Text style={styles.modalTitle}>Report an Incident</Text>
+                    <TextInput
+                      placeholder="Type (e.g., Poor Lighting, Harassment)"
+                      value={incidentType}
+                      onChangeText={setIncidentType}
+                      style={styles.modalInput}
+                    />
+                    <TextInput
+                      placeholder="Description..."
+                      value={incidentDesc}
+                      onChangeText={setIncidentDesc}
+                      style={[styles.modalInput, { height: 80 }]}
+                      multiline
+                    />
+                    <View style={styles.modalButtons}>
+                      <TouchableOpacity onPress={() => setReportModalVisible(false)} style={styles.cancelBtn}>
+                        <Text style={styles.cancelTxt}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={handleReportSubmit} style={styles.submitBtn}>
+                        <Text style={styles.submitTxt}>Submit</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </Modal>
 
+      {/* 👤 Drawer */}
+      {drawerOpen && (
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPressOut={closeDrawer}>
+          <Animated.View style={[styles.drawerContainer, { left: drawerAnim }]}>
+            <View style={styles.profileHeader}>
+              <MaterialIcons name="account-circle" size={60} color="#4a4a4a" />
+              <Text style={styles.accName}> Mrudul </Text>
+            </View>
+
+            <View style={styles.optionSection}>
+              {[
+                ["settings", "Settings"],
+                ["bell", "Emergency Options"],
+                ["map-pin", "Saved Locations"],
+                ["user", "Profile Settings"],
+              ].map(([icon, label]) => (
+                <TouchableOpacity key={label} style={styles.optionItem}>
+                  <Feather name={icon} size={20} color="#333" />
+                  <Text style={styles.optionText}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.footerSection}>
+              <Text style={styles.footerText}>App version 1.0.0</Text>
+              <Text style={styles.footerText}>Developed by Team SafePath</Text>
+            </View>
+          </Animated.View>
+        </TouchableOpacity>
+      )}
       {/* 🌙 Night Mode Toggle */}
       <View style={styles.nightContainer}>
         <TouchableOpacity
